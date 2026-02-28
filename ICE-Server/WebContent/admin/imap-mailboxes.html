@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IMAP Mailboxes</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 900px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+
+        .filter-row select {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 0.7rem 1.5rem;
+            font-size: 1rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        .statusMessage {
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .statusMessage.error {
+            color: #721c24;
+            background: #f8d7da;
+        }
+
+        a.back-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        a.back-link:hover {
+            color: #0056b3;
+        }
+    </style>
+    <script type="text/javascript" src="../js/aux.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>IMAP Mailboxes</h1>
+
+    <div class="filter-row">
+        <select id="userSelect">
+            <option value="">-- Select user --</option>
+        </select>
+        <button id="listBtn" onclick="fetchMailboxes()">List</button>
+    </div>
+
+    <table id="mailboxTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Mailbox Name</th>
+                <th>Mailbox ID</th>
+            </tr>
+        </thead>
+        <tbody id="mailboxBody"></tbody>
+    </table>
+
+    <div id="statusMessage" class="statusMessage" style="display: none;"></div>
+    <a class="back-link" href="index.html">&larr; Back to Admin</a>
+</div>
+
+<script>
+    async function loadUsers() {
+        var select = document.getElementById('userSelect');
+        try {
+            var result = await callServer('/admin/users', {
+                method: 'POST',
+                body: JSON.stringify({ filter: '' })
+            });
+            if (!result) return;
+
+            var users = result.data || [];
+            users.forEach(function (user) {
+                var opt = document.createElement('option');
+                opt.value = user.username;
+                opt.textContent = user.username;
+                select.appendChild(opt);
+            });
+        } catch (err) {
+            showError('Failed to load users: ' + err.message);
+        }
+    }
+
+    async function fetchMailboxes() {
+        var userName = document.getElementById('userSelect').value;
+        if (!userName) {
+            showError('Please select a user');
+            return;
+        }
+
+        var btn = document.getElementById('listBtn');
+        var tbody = document.getElementById('mailboxBody');
+        var table = document.getElementById('mailboxTable');
+        var statusEl = document.getElementById('statusMessage');
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+        statusEl.style.display = 'none';
+
+        try {
+            var response = await fetch('/admin/imap/mailboxes?user=' + encodeURIComponent(userName));
+            if (response.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            var mailboxes = await response.json();
+            tbody.innerHTML = '';
+
+            if (!Array.isArray(mailboxes) || mailboxes.length === 0) {
+                table.style.display = 'table';
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-message">No mailboxes found</td></tr>';
+            } else {
+                table.style.display = 'table';
+                mailboxes.forEach(function (mb, index) {
+                    var row = document.createElement('tr');
+                    var td1 = document.createElement('td');
+                    td1.textContent = index + 1;
+                    var td2 = document.createElement('td');
+                    td2.textContent = mb.mailboxName || '';
+                    var td3 = document.createElement('td');
+                    td3.textContent = mb.mailboxId || '';
+                    row.appendChild(td1);
+                    row.appendChild(td2);
+                    row.appendChild(td3);
+                    tbody.appendChild(row);
+                });
+            }
+        } catch (err) {
+            showError('Failed to load mailboxes: ' + err.message);
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'List';
+    }
+
+    function showError(msg) {
+        var statusEl = document.getElementById('statusMessage');
+        statusEl.style.display = 'block';
+        statusEl.className = 'statusMessage error';
+        statusEl.textContent = msg;
+    }
+
+    document.addEventListener('DOMContentLoaded', loadUsers);
+</script>
+
+</body>
+</html>

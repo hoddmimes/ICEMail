@@ -1,0 +1,44 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenPGP Password Encryption</title>
+</head>
+<body>
+<h2>Encrypt Text with Password</h2>
+
+<textarea id="plainText" rows="6" cols="60"
+          placeholder="Enter text to encrypt"></textarea><br><br>
+
+<input type="password" id="password"
+       placeholder="Enter password"><br><br>
+
+<button onclick="encryptText()">Encrypt</button>
+
+<h3>Encrypted Output</h3>
+<textarea id="output" rows="8" cols="60" readonly></textarea>
+
+<script src="https://unpkg.com/openpgp@5.11.0/dist/openpgp.min.js"></script>
+<script>
+    async function encryptText() {
+      const text = document.getElementById('plainText').value;
+      const password = document.getElementById('password').value;
+
+      if (!text || !password) {
+        alert("Text and password are required");
+        return;
+      }
+
+      const encrypted = await openpgp.encrypt({
+        message: await openpgp.createMessage({ text }),
+        passwords: [password],
+        format: 'armored' // ASCII armored output
+      });
+
+      document.getElementById('output').value = encrypted;
+    }
+</script>
+</body>
+</html>
+

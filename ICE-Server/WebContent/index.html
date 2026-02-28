@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ICEMail</title>
+    <link rel="stylesheet" type="text/css" href="./css/create_account.css">
+    <style>
+        .card { max-width: 420px; text-align: center; gap: 1rem; }
+        h1 { margin: 0 0 0.2rem 0; font-size: 2rem; color: #1a1a2e; }
+        .subtitle { margin: 0 0 0.5rem 0; font-size: 0.95rem; color: #555; }
+        .notice {
+            font-size: 0.85rem;
+            color: #856404;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 0.6rem 0.8rem;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid #e0e0e0;
+            margin: 0.2rem 0;
+        }
+        .btn-secondary {
+            background: white;
+            color: #007bff;
+            border: 1px solid #007bff;
+        }
+        .btn-secondary:hover { background: #f0f6ff; }
+        .build-info {
+            font-size: 0.78rem;
+            color: #888;
+            text-align: center;
+            margin-top: 0.2rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>ICEMail</h1>
+    <p class="subtitle">Self-hosted end-to-end encrypted mail</p>
+
+    <div class="notice">
+        This is a test site for the ICEMail service.<br>
+        All messages are end-to-end encrypted — the server never has access to your keys or plaintext mail.
+    </div>
+
+    <hr class="divider">
+
+    <a href="./login.html" style="text-decoration:none;">
+        <button type="button">Login</button>
+    </a>
+
+    <a href="./create_account.html" style="text-decoration:none;">
+        <button type="button" class="btn-secondary">Create Account</button>
+    </a>
+
+    <div class="build-info" id="buildInfo"></div>
+</div>
+
+<script>
+    fetch('./build-info.json')
+        .then(r => r.ok ? r.json() : null)
+        .then(info => {
+            if (info) {
+                document.getElementById('buildInfo').textContent =
+                    'Deployed ' + info.deployedAt + '  \u2022  ' + info.gitBranch + '@' + info.gitCommit;
+            }
+        })
+        .catch(() => {});
+</script>
+
+</body>
+</html>

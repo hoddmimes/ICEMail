@@ -1,0 +1,17 @@
+{
+  "listenPort": 1143,
+  "plainEnabled": true,
+  "imapsListenPort": 1993,
+  "imapsEnabled": true,
+  "imapsCertPath": "cert.pem",
+  "imapsKeyPath": "key.pem",
+  "imapHost": "localhost",
+  "imapPort": 993,
+  "decryptorClass": "com.hoddmimes.icemail.bridge.PassthroughDecryptor",
+  "loginHandlerClass": "com.hoddmimes.icemail.bridge.PBKDF2LoginHandler",
+  "smtpEnabled": true,
+  "smtpListenPort": 1587,
+  "smtpHost": "localhost",
+  "smtpPort": 587,
+  "tlsProtocol": "TLSv1.3"
+}

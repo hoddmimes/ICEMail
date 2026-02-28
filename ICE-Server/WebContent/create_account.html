@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create Account</title>
+    <link rel="stylesheet" type="text/css" href="css/create_account.css">
+    <link rel="stylesheet" type="text/css" href="css/aux.css">
+    <script type="text/javascript" src="js/argon2-bundled.min.js"></script>
+    <script type="text/javascript" src="js/crypto-js.min.js"></script>
+    <script type="text/javascript" src="js/openpgp.min.js"></script>
+    <script type="text/javascript" src="js/aux.js"></script>
+    <script type="text/javascript" src="js/create_account.js"></script>
+</head>
+<body>
+
+<div class="card">
+    <h1>Create Account</h1>
+
+    <input id="username" type="text" placeholder="Username" autocomplete="username" />
+    <input id="password" type="password" placeholder="Password" autocomplete="new-password" />
+    <input id="password2" type="password" placeholder="Confirm Password" autocomplete="new-password" />
+    <input id="confMail" type="text" placeholder="Confirmation Mail Address" autocomplete="confirmation-mail" />
+
+    <button id="submit">Create User</button>
+
+    <div id="StatusMessage" class="statusMessage"></div>
+</div>
+
+
+</body>
+</html>

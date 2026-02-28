@@ -1,0 +1,61 @@
+body {
+  font-family: sans-serif;
+  min-width: 18em;
+  padding: 0.5em 1em;
+}
+
+h2 {
+  margin: 0 0 0.4em;
+  font-size: 1.1em;
+}
+
+p {
+  margin: 0 0 0.8em;
+}
+
+label {
+  display: block;
+  margin-top: 0.5em;
+  font-size: 0.85em;
+}
+
+input[type="password"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.3em;
+  margin-top: 0.2em;
+  font-size: 0.95em;
+}
+
+.error {
+  color: #c00;
+  font-size: 0.85em;
+  min-height: 1.2em;
+  margin-top: 0.3em;
+}
+
+#buttons {
+  margin-top: 1em;
+  display: flex;
+  gap: 0.5em;
+}
+
+button {
+  flex: 1;
+  padding: 0.4em 0.6em;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+#btn-encrypt {
+  background: #0060df;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+}
+
+#btn-skip {
+  background: #eee;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}

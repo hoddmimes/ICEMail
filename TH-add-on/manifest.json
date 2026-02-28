@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "version": "1.0",
+  "name": "ICE Encryption",
+  "description": "Encrypts outgoing email content with a symmetric password and adds an X-ICE-UID header.",
+  "author": "Thunderbird Team",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ice-encryption@mv3.sample.extensions.thunderbird.net",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": ["compose", "alarms"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "compose_action": {
+    "default_title": "ICE Encrypt",
+    "default_popup": "popup.html"
+  }
+}

@@ -1,0 +1,51 @@
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flow</title>
+    <script type="text/javascript" src="../js/aux.js"></script>
+
+
+</head>
+<body>
+
+<div>
+    <h1>TestFlow</h1>
+
+    <input id="Value" type="value" placeholder="Value" autocomplete="value" />
+    <button id="submit">Test Flow</button>
+    </br>
+    <div>
+        <p id="StatusMessage"></p>
+    </div>
+
+</div>
+
+<script>
+    const btn = document.getElementById("submit");
+    btn.addEventListener("click", testFlow );
+
+    async function testFlow() {
+        const value = document.getElementById("Value").value;
+        const jRequest  = { 'value' : value };
+
+        const jResponse = await callServer("/tstflow", {
+          method: "POST",
+          body: JSON.stringify( jRequest )
+        });
+
+        if (!jResponse) {
+            console.log("no data");
+            return;
+        }
+
+        const stsMsg = document.getElementById("StatusMessage");
+        stsMsg.innerHTML = JSON.stringify(jResponse)
+    }
+</script>
+
+</body>
+</html>
+
+
+

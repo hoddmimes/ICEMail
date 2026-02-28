@@ -1,0 +1,5 @@
+rootProject.name = 'ICEMail'
+include 'ICE-Server'
+include 'ICE-Mailbridge'
+//include 'ICE-WEB-App'  // TODO: module not yet created
+include 'TH-add-on'

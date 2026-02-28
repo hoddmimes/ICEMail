@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Decrypt Message</title>
+    <link rel="stylesheet" type="text/css" href="css/create_account.css">
+    <link rel="stylesheet" type="text/css" href="css/aux.css">
+    <style>
+        #decryptedContent {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            display: none;
+        }
+        #senderInfo {
+            margin-top: 8px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Decrypt Message</h1>
+
+    <p id="info">Enter the password provided by the sender to decrypt this message.</p>
+
+    <div id="senderInfo"></div>
+
+    <div id="passwordForm">
+        <input type="password" id="passwordInput" placeholder="Enter decryption password" style="width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box;" />
+        <button id="decryptBtn">Decrypt</button>
+    </div>
+
+    <div id="decryptedContent"></div>
+
+    <div id="StatusMessage" class="statusMessage"></div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("decryptBtn");
+    const info = document.getElementById("info");
+    const stsMsg = document.getElementById("StatusMessage");
+    const passwordInput = document.getElementById("passwordInput");
+    const decryptedContent = document.getElementById("decryptedContent");
+    const senderInfo = document.getElementById("senderInfo");
+    const passwordForm = document.getElementById("passwordForm");
+
+    const params = new URLSearchParams(window.location.search);
+    const uid = params.get("uid");
+
+    if (!uid) {
+        info.textContent = "Invalid link: no message ID provided.";
+        passwordForm.style.display = "none";
+        return;
+    }
+
+    passwordInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") btn.click();
+    });
+
+    btn.addEventListener("click", async () => {
+        const password = passwordInput.value;
+        if (!password) {
+            stsMsg.textContent = "Please enter a password.";
+            stsMsg.className = "statusMessage error";
+            return;
+        }
+
+        btn.disabled = true;
+        stsMsg.textContent = "Fetching and decrypting...";
+        stsMsg.className = "statusMessage";
+
+        try {
+            const response = await fetch("/decrypt-message?uid=" + encodeURIComponent(uid));
+            const result = await response.json();
+
+            if (!result.success || !result.data) {
+                stsMsg.textContent = result.message || "Message not found.";
+                stsMsg.className = "statusMessage error";
+                btn.disabled = false;
+                return;
+            }
+
+            const data = result.data;
+            if (data.sender) {
+                senderInfo.textContent = "From: " + data.sender;
+            }
+
+            const plaintext = await decryptBody(data.encrypted_body, password);
+            decryptedContent.textContent = plaintext;
+            decryptedContent.style.display = "block";
+            passwordForm.style.display = "none";
+            info.textContent = "Message decrypted successfully.";
+            stsMsg.textContent = "";
+            stsMsg.className = "statusMessage";
+        } catch (e) {
+            stsMsg.textContent = "Decryption failed. Wrong password or corrupted data.";
+            stsMsg.className = "statusMessage error";
+            btn.disabled = false;
+        }
+    });
+
+    async function decryptBody(base64Payload, password) {
+        const json = JSON.parse(atob(base64Payload));
+        const salt = Uint8Array.from(atob(json.salt), c => c.charCodeAt(0));
+        const iv = Uint8Array.from(atob(json.iv), c => c.charCodeAt(0));
+        const ciphertext = Uint8Array.from(atob(json.ciphertext), c => c.charCodeAt(0));
+
+        const encoder = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(password),
+            "PBKDF2",
+            false,
+            ["deriveKey"]
+        );
+        const key = await crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt,
+                iterations: 100000,
+                hash: "SHA-256",
+            },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["decrypt"]
+        );
+
+        const decrypted = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv },
+            key,
+            ciphertext
+        );
+
+        return new TextDecoder().decode(decrypted);
+    }
+});
+</script>
+
+</body>
+</html>

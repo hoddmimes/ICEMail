@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ICE Web Mail</title>
+    <link rel="stylesheet" type="text/css" href="/css/webmail.css">
+</head>
+<body>
+
+<nav class="top-menu">
+    <div class="top-menu-left">
+        <span class="app-title">ICE Mail</span>
+        <div class="mailbox-dropdown">
+            <button id="mailboxBtn" class="menu-btn">
+                <span id="mailboxLabel">Mailbox</span> &#9662;
+            </button>
+            <div id="mailboxDropdown" class="dropdown-content"></div>
+        </div>
+    </div>
+    <div class="top-menu-right">
+        <button id="contactsBtn" class="menu-btn">Contacts</button>
+        <button id="composeBtn" class="menu-btn menu-btn-primary">Compose</button>
+    </div>
+</nav>
+
+<main id="content" class="content-area">
+    <div class="loading">Loading...</div>
+</main>
+
+<div id="StatusMessage" class="statusMessage"></div>
+
+<script type="text/javascript" src="/js/openpgp.min.js"></script>
+<script type="text/javascript" src="/js/aux.js"></script>
+<script type="text/javascript" src="/js/webmail.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.gradleup.shadow' version '9.0.0-beta4'
+}
+
+group = 'com.hoddmimes'
+version = '1.0'
+
+application {
+    mainClass = 'com.hoddmimes.icemail.bridge.MailBridge'
+}
+
+// Configure shadow jar (fat jar with all dependencies)
+shadowJar {
+    archiveBaseName = 'ice-mailbridge'
+    archiveClassifier = ''
+    archiveVersion = version
+    destinationDirectory = file("${buildDir}/distributions")
+
+    // Set manifest with main class
+    manifest {
+        attributes 'Main-Class': application.mainClass
+    }
+
+    // Merge service files for Log4j2
+    mergeServiceFiles()
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.logging.log4j:log4j-api:2.24.3'
+    implementation 'org.apache.logging.log4j:log4j-core:2.24.3'
+    implementation 'com.google.code.gson:gson:2.11.0'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}

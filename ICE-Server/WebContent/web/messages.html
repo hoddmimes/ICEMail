@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Messages</title>
+    <link rel="stylesheet" type="text/css" href="/css/messages.css">
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <a href="mailboxes.html" class="back-link">&larr;</a>
+        <h1 id="folderName">Messages</h1>
+        <span class="message-count" id="messageCount"></span>
+    </div>
+
+    <div class="message-row" style="font-weight: 600; padding: 0.5rem 1rem; border-bottom: 2px solid #ddd;">
+        <span>Date</span>
+        <span>From</span>
+        <span>To</span>
+        <span>Subject</span>
+    </div>
+
+    <ul class="message-list" id="messageList">
+        <li class="loading">Loading messages...</li>
+    </ul>
+
+    <div class="more-container" id="moreContainer" style="display: none;">
+        <button class="more-btn" id="moreBtn" onclick="loadMore()">More</button>
+    </div>
+    <div id="StatusMessage" class="statusMessage"></div>
+</div>
+
+
+
+</body>
+</html>

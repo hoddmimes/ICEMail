@@ -1,0 +1,82 @@
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 600px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .mailbox-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .mailbox-table th {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 2px solid #dee2e6;
+            color: #495057;
+            font-weight: 600;
+        }
+
+        .mailbox-table th:nth-child(2),
+        .mailbox-table th:nth-child(3) {
+            text-align: right;
+            width: 100px;
+        }
+
+        .mailbox-row td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .mailbox-row:hover {
+            background: #f8f9fa;
+        }
+
+        .mailbox-link {
+            text-decoration: none;
+            color: #007bff;
+            font-weight: 500;
+        }
+
+        .mailbox-link:hover {
+            text-decoration: underline;
+        }
+
+        .count-cell {
+            text-align: right;
+            color: #666;
+        }
+
+        .unread-count {
+            color: #dc3545;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        .error {
+            color: #721c24;
+            background: #f8d7da;
+            padding: 1rem;
+            border-radius: 4px;
+        }

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mailboxes</title>
+    <link rel="stylesheet" type="text/css" href="/css/mailboxes.css">
+    <script type="text/javascript" src="/js/aux.js"></script>
+    <script type="text/javascript" src="/js/mailboxes.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>Mailboxes</h1>
+
+    <table class="mailbox-table" id="mailboxTable">
+        <thead>
+            <tr>
+                <th>Mailbox</th>
+                <th>Messages</th>
+                <th>Unread</th>
+            </tr>
+        </thead>
+        <tbody id="mailboxBody">
+            <tr><td colspan="3" class="loading">Loading mailboxes...</td></tr>
+        </tbody>
+    </table>
+    <div id="StatusMessage" class="statusMessage"></div>
+</div>
+
+</body>
+</html>

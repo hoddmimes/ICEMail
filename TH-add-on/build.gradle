@@ -1,0 +1,21 @@
+plugins {
+    id 'base'
+}
+
+group = 'com.hoddmimes'
+version = '1.0'
+
+def xpiFiles = ['manifest.json', 'background.js', 'popup.html', 'popup.js', 'popup.css']
+
+tasks.register('xpi', Zip) {
+    description = 'Builds the ICE-encryption.xpi Thunderbird add-on'
+    archiveFileName = 'ICE-encryption.xpi'
+    destinationDirectory = layout.buildDirectory
+
+    from projectDir
+    include xpiFiles
+}
+
+tasks.named('assemble') {
+    dependsOn 'xpi'
+}

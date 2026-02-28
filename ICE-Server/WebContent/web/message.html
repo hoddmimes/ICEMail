@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Message</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 900px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .back-link {
+            text-decoration: none;
+            color: #007bff;
+            font-size: 1.5rem;
+        }
+
+        h1 {
+            font-size: 1.3rem;
+            margin: 0;
+            color: #333;
+            flex: 1;
+        }
+
+        .message-meta {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+
+        .meta-row {
+            display: flex;
+            margin-bottom: 0.5rem;
+        }
+
+        .meta-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .meta-label {
+            font-weight: 600;
+            width: 80px;
+            color: #555;
+        }
+
+        .meta-value {
+            color: #333;
+            flex: 1;
+        }
+
+        .message-body {
+            padding: 1rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            font-family: inherit;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background: #fafafa;
+            overflow-x: auto;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        .error {
+            color: #721c24;
+            background: #f8d7da;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+
+        .attachment-list {
+            margin-top: 1rem;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+
+        .attachment-list-header {
+            padding: 0.6rem 1rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #555;
+            border-bottom: 1px solid #eee;
+        }
+
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .attachment-item:last-child {
+            border-bottom: none;
+        }
+
+        .attachment-item a {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .attachment-item a:hover {
+            text-decoration: underline;
+        }
+
+        .attachment-size,
+        .attachment-type {
+            font-size: 0.8rem;
+            color: #888;
+        }
+    </style>
+    <script type="text/javascript" src="../js/openpgp.min.js"></script>
+    <script type="text/javascript" src="../js/aux.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <a href="#" class="back-link" id="backLink">&larr;</a>
+        <h1 id="subject">Loading...</h1>
+    </div>
+
+    <div id="messageContent">
+        <div class="loading">Loading message...</div>
+    </div>
+</div>
+
+<script>
+    function getQueryParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
+    }
+
+    async function fetchMessage() {
+        const folder = getQueryParam('folder');
+        const msgNum = getQueryParam('msg');
+
+        // Set back link to messages page with folder
+        document.getElementById('backLink').href = `messages.html?folder=${encodeURIComponent(folder)}`;
+
+        if (!folder || !msgNum) {
+            document.getElementById('messageContent').innerHTML = '<div class="error">Missing folder or message parameter</div>';
+            return;
+        }
+
+        const content = document.getElementById('messageContent');
+
+        const result = await callServer(`/web/message?folder=${encodeURIComponent(folder)}&msg=${msgNum}`);
+        if (!result) return;
+
+        const msg = result.data;
+        document.getElementById('subject').textContent = msg.subject || '(No subject)';
+        document.title = msg.subject || 'Message';
+
+        // Decrypt PGP-encrypted body if present
+        let bodyText = msg.body || '';
+        if (bodyText.indexOf('-----BEGIN PGP MESSAGE-----') >= 0) {
+            bodyText = await decryptPgpBody(bodyText);
+        }
+
+        let attachmentsHtml = '';
+        if (msg.attachments && msg.attachments.length > 0) {
+            attachmentsHtml = '<div class="attachment-list">';
+            attachmentsHtml += '<div class="attachment-list-header">Attachments (' + msg.attachments.length + ')</div>';
+            msg.attachments.forEach(function (att) {
+                const attUrl = '/web/attachment?folder=' + encodeURIComponent(folder) + '&msg=' + msgNum + '&part=' + att.partIndex;
+                const sizeStr = att.size != null ? formatFileSize(att.size) : '';
+                attachmentsHtml += '<div class="attachment-item">';
+                attachmentsHtml += '<a href="' + escapeHtml(attUrl) + '" target="_blank">' + escapeHtml(att.filename) + '</a>';
+                if (sizeStr) {
+                    attachmentsHtml += '<span class="attachment-size">' + sizeStr + '</span>';
+                }
+                attachmentsHtml += '<span class="attachment-type">' + escapeHtml(att.contentType) + '</span>';
+                attachmentsHtml += '</div>';
+            });
+            attachmentsHtml += '</div>';
+        }
+
+        content.innerHTML = `
+            <div class="message-meta">
+                <div class="meta-row">
+                    <span class="meta-label">Date:</span>
+                    <span class="meta-value">${escapeHtml(msg.date)}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">From:</span>
+                    <span class="meta-value">${escapeHtml(msg.from)}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-label">To:</span>
+                    <span class="meta-value">${escapeHtml(msg.to)}</span>
+                </div>
+            </div>
+            <div class="message-body">${escapeHtml(bodyText)}</div>
+            ${attachmentsHtml}
+        `;
+    }
+
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    async function decryptPgpBody(body) {
+        try {
+            const password = sessionStorage.getItem('password');
+            if (!password) {
+                return '[PGP encrypted message - re-login to decrypt]';
+            }
+
+            // Fetch the user's encrypted private key from the server
+            const profileResult = await callServer('/web/profile');
+            if (!profileResult || !profileResult.data || !profileResult.data.privateKey) {
+                return '[PGP encrypted message - could not load private key]';
+            }
+
+            const encPrivateKeyB64 = profileResult.data.privateKey;
+
+            // Decrypt the stored private key (it was encrypted with openpgp symmetric encryption using the password)
+            const encPrivateKeyBinary = base64ToUint8Array(encPrivateKeyB64);
+            const encMessage = await openpgp.readMessage({ binaryMessage: encPrivateKeyBinary });
+            const { data: armoredPrivateKey } = await openpgp.decrypt({
+                message: encMessage,
+                passwords: [password],
+                format: 'binary'
+            });
+
+            // Convert the decrypted binary back to the armored private key string
+            const privateKeyArmored = new TextDecoder().decode(armoredPrivateKey);
+
+            // Read and decrypt the private key with the passphrase
+            const privateKey = await openpgp.decryptKey({
+                privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
+                passphrase: password
+            });
+
+            // Extract the PGP message block from the body
+            const pgpMatch = body.match(/-----BEGIN PGP MESSAGE-----[\s\S]*?-----END PGP MESSAGE-----/);
+            if (!pgpMatch) {
+                return body;
+            }
+
+            // Decrypt the PGP message
+            const pgpMessage = await openpgp.readMessage({ armoredMessage: pgpMatch[0] });
+            const { data: decrypted } = await openpgp.decrypt({
+                message: pgpMessage,
+                decryptionKeys: privateKey
+            });
+
+            // Replace the PGP block with decrypted content
+            return body.replace(pgpMatch[0], decrypted);
+        } catch (e) {
+            console.error('PGP decryption failed:', e);
+            return '[PGP encrypted message - decryption failed: ' + e.message + ']';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', fetchMessage);
+</script>
+
+</body>
+</html>

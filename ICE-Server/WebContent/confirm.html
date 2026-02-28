@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirm Account</title>
+    <link rel="stylesheet" type="text/css" href="css/create_account.css">
+    <link rel="stylesheet" type="text/css" href="css/aux.css">
+    <script type="text/javascript" src="js/aux.js"></script>
+</head>
+<body>
+
+<div class="card">
+    <h1>Confirm Account</h1>
+
+    <p id="info">Click the button below to confirm your account.</p>
+
+    <button id="confirmBtn">Confirm Account</button>
+
+    <div id="StatusMessage" class="statusMessage"></div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("confirmBtn");
+    const info = document.getElementById("info");
+    const stsMsg = document.getElementById("StatusMessage");
+
+    const params = new URLSearchParams(window.location.search);
+    const uid = params.get("uid");
+
+    if (!uid) {
+        info.textContent = "Invalid confirmation link.";
+        btn.style.display = "none";
+        return;
+    }
+
+    btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        stsMsg.textContent = "";
+        stsMsg.className = "statusMessage";
+
+        try {
+            const response = await fetch("/confirm", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ uid: uid })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                stsMsg.textContent = result.message;
+                stsMsg.className = "statusMessage success";
+                btn.style.display = "none";
+                info.textContent = "Your account has been confirmed.";
+            } else {
+                stsMsg.textContent = result.message;
+                stsMsg.className = "statusMessage error";
+                btn.disabled = false;
+            }
+        } catch (e) {
+            stsMsg.textContent = "Error confirming account: " + e.message;
+            stsMsg.className = "statusMessage error";
+            btn.disabled = false;
+        }
+    });
+});
+</script>
+
+</body>
+</html>

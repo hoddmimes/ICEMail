@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ICE Admin</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 600px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        .action-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .action-list li {
+            border-bottom: 1px solid #eee;
+        }
+
+        .action-list li:last-child {
+            border-bottom: none;
+        }
+
+        .action-list a {
+            display: block;
+            padding: 1rem;
+            text-decoration: none;
+            color: #007bff;
+            font-size: 1.1rem;
+            border-radius: 4px;
+        }
+
+        .action-list a:hover {
+            background: #f8f9fa;
+            color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>ICE Admin</h1>
+    <ul class="action-list">
+        <li><a href="users.html">List Users</a></li>
+        <li><a href="create_user.html">Create User</a></li>
+        <li><a href="statistics.html">Mail Statistics</a></li>
+    </ul>
+
+    <h1>IMAP Admin</h1>
+    <ul class="action-list">
+        <li><a href="imap-users.html">List Users</a></li>
+        <li><a href="imap-domains.html">List Domains</a></li>
+        <li><a href="imap-mailboxes.html">List Mailboxes</a></li>
+        <li><a href="imap-mailqueues.html">Mail Queues</a></li>
+        <li><a href="imap-mailrepositories.html">Mail Repositories</a></li>
+        <li><a href="imap-deadletters.html">Event Dead Letters</a></li>
+    </ul>
+</div>
+
+</body>
+</html>

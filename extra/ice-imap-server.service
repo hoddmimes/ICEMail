@@ -1,0 +1,12 @@
+[Unit]
+Description=ICE-IMAP Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/bash /usr/local/imap-james/imap-server-run.sh
+WorkingDirectory=/usr/local/imap-james
+Restart=no
+User=root
+
+[Install]
+WantedBy=multi-user.target

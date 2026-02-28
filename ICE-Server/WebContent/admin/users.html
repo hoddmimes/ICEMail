@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>User Administration</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 900px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-row input {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .confirmed-yes {
+            color: #28a745;
+            font-weight: 500;
+        }
+
+        .confirmed-no {
+            color: #dc3545;
+            font-weight: 500;
+        }
+
+        button {
+            padding: 0.7rem 1.5rem;
+            font-size: 1rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        button.btn-block {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+            background: #ffc107;
+            color: #333;
+        }
+
+        button.btn-block:hover {
+            background: #e0a800;
+        }
+
+        button.btn-delete {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+            background: #dc3545;
+        }
+
+        button.btn-delete:hover {
+            background: #c82333;
+        }
+
+        .action-cell {
+            white-space: nowrap;
+            display: flex;
+            gap: 0.4rem;
+        }
+
+        .statusMessage {
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .statusMessage.error {
+            color: #721c24;
+            background: #f8d7da;
+        }
+
+        .statusMessage.info {
+            color: #0c5460;
+            background: #d1ecf1;
+        }
+
+        .statusMessage.success {
+            color: #155724;
+            background: #d4edda;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        a.back-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        a.back-link:hover {
+            color: #0056b3;
+        }
+    </style>
+    <script type="text/javascript" src="../js/aux.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>User Administration</h1>
+
+    <div class="filter-row">
+        <input type="text" id="userFilter" placeholder="User Filter" />
+        <button id="refreshBtn" onclick="fetchUsers()">Search</button>
+    </div>
+
+    <table id="usersTable">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Created</th>
+                <th>Last Seen</th>
+                <th>Confirmation Mail</th>
+                <th>Confirmed</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="usersBody">
+            <tr><td colspan="6" class="empty-message">Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <div id="statusMessage" class="statusMessage" style="display: none;"></div>
+    <a class="back-link" href="index.html">&larr; Back to Admin</a>
+</div>
+
+<script>
+    async function fetchUsers() {
+        const btn = document.getElementById('refreshBtn');
+        const tbody = document.getElementById('usersBody');
+        const filter = document.getElementById('userFilter').value.trim();
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+
+        const result = await callServer('/admin/users', {
+            method: 'POST',
+            body: JSON.stringify({ filter: filter })
+        });
+
+        btn.disabled = false;
+        btn.textContent = 'Search';
+
+        if (!result) return;
+
+        const users = result.data || [];
+        tbody.innerHTML = '';
+
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-message">No users found</td></tr>';
+            return;
+        }
+
+        users.forEach(user => {
+            const row = document.createElement('tr');
+            const username = escapeHtml(user.username);
+            row.innerHTML = `
+                <td>${username}</td>
+                <td>${escapeHtml(user.created || '')}</td>
+                <td>${escapeHtml(user.lastSeen || '')}</td>
+                <td>${escapeHtml(user.confMail || '')}</td>
+                <td class="${user.confirmed ? 'confirmed-yes' : 'confirmed-no'}">
+                    ${user.confirmed ? 'Yes' : 'No'}
+                </td>
+                <td><div class="action-cell">
+                    <button class="btn-block" onclick="handleUser('block', '${username}')">Block</button>
+                    <button class="btn-delete" onclick="handleUser('delete', '${username}')">Delete</button>
+                </div></td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    async function handleUser(action, username) {
+        const confirmMsg = action === 'delete'
+            ? 'Are you sure you want to delete user "' + username + '"?'
+            : 'Are you sure you want to block user "' + username + '"?';
+
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+
+        const result = await callServer('/admin/handleUser', {
+            method: 'POST',
+            body: JSON.stringify({ action: action, username: username })
+        });
+
+        if (!result) return;
+        fetchUsers();
+    }
+
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Load users on page load
+    document.addEventListener('DOMContentLoaded', fetchUsers);
+</script>
+
+</body>
+</html>
