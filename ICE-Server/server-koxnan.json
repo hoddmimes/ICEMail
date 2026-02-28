@@ -1,10 +1,9 @@
 {
   "use_ipv4" : true,
-  "base_url" : "https://www.koxnan.com:8282",
+  "base_url" : "https://www.koxnan.com:443",
   "allow_registration" : true,
   "verbose" : true,
   "logfile" : null,
-  "https_port": "8282",
   "interface" : "0.0.0.0",
   "mail_domain" : "koxnan.com",
   "imap_host" : "127.0.0.1",
@@ -23,7 +22,7 @@
       "db_file" : "./ICEMail.sqlite"}
   },
   "admin" : { "password" :  "whatever",
-              "allowed_hosts" : ["127.0.0.1","192.168.42.12"] },
+              "allowed_hosts" : ["127.0.0.1","192.168.42.12","79.136.63.219"] },
   "internal_mailer" : {
     "internal_mail_user" : "mailer",
     "internal_mail_user_password" : "whatever",

@@ -169,7 +169,7 @@ of complexity. However, here is a crash instruction on 10000 feet what to think 
     - If you would like to run the servers as server there are examples how on the service defintion files.
 
 I have a very first version of the solution up and running for testing on koxnan.com. 
-You might be able to try it out on https://www.koxnan.com:8282/index.html
+You might be able to try it out on https://www.koxnan.com/index.html
 
 
 _That is all folk!_
