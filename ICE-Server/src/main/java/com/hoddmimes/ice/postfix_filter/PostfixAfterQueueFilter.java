@@ -7,6 +7,10 @@ import com.hoddmimes.ice.server.DBSqlite3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import jakarta.mail.BodyPart;
+import jakarta.mail.Multipart;
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeUtility;
 
 import java.io.*;
@@ -299,18 +303,42 @@ public class PostfixAfterQueueFilter extends Thread {
         }
 
         /**
-         * If the message has Content-Transfer-Encoding: quoted-printable, decode the body
-         * so that PGP encrypts clean text rather than raw QP escape sequences.
-         * Skips multipart bodies (each part has its own CTE handled separately).
+         * Decode the message body before PGP encryption so the client sees clean text.
+         *
+         * - Simple messages with Content-Transfer-Encoding: quoted-printable are decoded directly.
+         * - Multipart messages (e.g. Apple Mail multipart/alternative) are parsed via Jakarta Mail,
+         *   which handles QP decoding and charset conversion for each inner part automatically.
+         *   The best available text part (plain preferred over HTML) is returned.
          */
         private String decodeBodyIfNeeded(String headers, String body) {
-            String cte = extractHeader(headers, "Content-Transfer-Encoding");
-            if (cte == null || !cte.trim().equalsIgnoreCase("quoted-printable")) {
+            String contentType = extractHeader(headers, "Content-Type");
+            boolean isMultipart = contentType != null && contentType.toLowerCase().contains("multipart");
+
+            if (isMultipart) {
+                try {
+                    // Reconstruct the full raw message so Jakarta Mail can parse it correctly,
+                    // including folded headers and per-part Content-Transfer-Encoding.
+                    byte[] rawMsg = (headers + "\r\n\r\n" + body).getBytes(StandardCharsets.ISO_8859_1);
+                    Session session = Session.getDefaultInstance(new java.util.Properties());
+                    MimeMessage msg = new MimeMessage(session, new ByteArrayInputStream(rawMsg));
+                    Object content = msg.getContent();
+                    if (content instanceof Multipart) {
+                        String decoded = extractTextFromMultipart((Multipart) content);
+                        if (decoded != null && !decoded.isEmpty()) {
+                            return decoded;
+                        }
+                    } else if (content instanceof String) {
+                        return (String) content;
+                    }
+                } catch (Exception e) {
+                    LOGGER.warn("After-queue filter: multipart decode failed, using raw body: {}", e.getMessage());
+                }
                 return body;
             }
 
-            String contentType = extractHeader(headers, "Content-Type");
-            if (contentType != null && contentType.toLowerCase().contains("multipart")) {
+            // Simple (non-multipart) message: decode QP if needed.
+            String cte = extractHeader(headers, "Content-Transfer-Encoding");
+            if (cte == null || !cte.trim().equalsIgnoreCase("quoted-printable")) {
                 return body;
             }
 
@@ -334,6 +362,36 @@ public class PostfixAfterQueueFilter extends Thread {
                 LOGGER.warn("After-queue filter: QP decode failed, using raw body: {}", e.getMessage());
                 return body;
             }
+        }
+
+        /**
+         * Walk a multipart tree and return the best text content found.
+         * Prefers text/plain; falls back to text/html if no plain text is present.
+         * Jakarta Mail's getContent() handles QP/base64 decoding and charset conversion.
+         */
+        private String extractTextFromMultipart(Multipart multipart) throws Exception {
+            String plainText = null;
+            String htmlText  = null;
+
+            for (int i = 0; i < multipart.getCount(); i++) {
+                BodyPart part = multipart.getBodyPart(i);
+                String ct = part.getContentType().toLowerCase();
+                Object c  = part.getContent();
+
+                if (ct.startsWith("text/plain") && c instanceof String) {
+                    plainText = (String) c;
+                } else if (ct.startsWith("text/html") && c instanceof String) {
+                    htmlText = (String) c;
+                } else if (c instanceof Multipart) {
+                    String nested = extractTextFromMultipart((Multipart) c);
+                    if (nested != null && !nested.isEmpty()) {
+                        return nested;
+                    }
+                }
+            }
+
+            if (plainText != null) return plainText;
+            return htmlText; // may be null — caller handles that
         }
 
         private String extractHeader(String headers, String headerName) {
