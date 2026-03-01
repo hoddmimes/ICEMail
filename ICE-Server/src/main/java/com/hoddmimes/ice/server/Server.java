@@ -569,8 +569,13 @@ public class Server
         final int https_port = jConfig.get("https_port").getAsInt();
         final int http_port = port;
 
+        JsonObject jSsl = jConfig.get("ssl").getAsJsonObject();
+        String sslCert = jSsl.get("cert").getAsString();
+        String sslKey  = jSsl.get("key").getAsString();
+        LOGGER.info("SSL cert: {}, key: {}", sslCert, sslKey);
+
         SslPlugin sslPlugin = new SslPlugin(conf -> {
-            conf.pemFromPath("cert.pem", "key.pem");
+            conf.pemFromPath(sslCert, sslKey);
             conf.insecure=tInsecurePort;
             conf.http2=true;
             conf.sniHostCheck=false;
