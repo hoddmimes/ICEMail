@@ -11,6 +11,7 @@
     <script type="text/javascript" src="js/openpgp.min.js"></script>
     <script type="text/javascript" src="js/aux.js"></script>
     <script type="text/javascript" src="js/create_account.js"></script>
+    <script type="module" src="js/altcha.js"></script>
 </head>
 <body>
 
@@ -21,6 +22,8 @@
     <input id="password" type="password" placeholder="Password" autocomplete="new-password" />
     <input id="password2" type="password" placeholder="Confirm Password" autocomplete="new-password" />
     <input id="confMail" type="text" placeholder="Confirmation Mail Address" autocomplete="confirmation-mail" />
+
+    <altcha-widget challengeurl="/altcha/challenge" id="altcha"></altcha-widget>
 
     <button id="submit">Create User</button>
 

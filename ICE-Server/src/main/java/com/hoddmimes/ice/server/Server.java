@@ -92,6 +92,9 @@ public class Server
     // Dovecot SASL server
     DovecotSaslServer mSaslServer;
 
+    // ALTCHA captcha service (null when not configured)
+    AltchaService mAltchaService;
+
 
     private void logStartupInfo() {
         LOGGER.info("Working directory: {}", System.getProperty("user.dir"));
@@ -187,6 +190,12 @@ public class Server
                 }
             }
 
+            if (jConfig.has("altcha")) {
+                JsonObject jAltcha = jConfig.get("altcha").getAsJsonObject();
+                mAltchaService = new AltchaService(jAltcha.get("hmac_key").getAsString());
+                LOGGER.info("ALTCHA captcha enabled");
+            }
+
             LOGGER.info("loaded configuration ({})", tConfigFilename);
             LOGGER.info("IMAP server: {}:{} (SSL: {})", mImapHost, mImapPort, mImapSsl);
             LOGGER.info("Messages batch size: {}", mMessagesBatchSize);
@@ -194,7 +203,7 @@ public class Server
             mImapWebApi = new ImapRestApi(jConfig);
 
         } catch (IOException e) {
-            new RuntimeException(e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -447,10 +456,22 @@ public class Server
 
         // Admin handler for user management
         mAdminHandler = new AdminHandler(db, mBaseUrl, mMailDomain, mAllowRegistration,
-                mInternalMailUser, mInternalMailPassword, mInternalMailSmtpHost, mInternalMailSmtpPort, mInternalMailStartTls);
+                mInternalMailUser, mInternalMailPassword, mInternalMailSmtpHost, mInternalMailSmtpPort, mInternalMailStartTls,
+                mAltchaService);
 
         // Public endpoints
         mApp.post("/tstpost", Server::testPostS);
+        mApp.get("/altcha/challenge", ctx -> {
+            if (mAltchaService == null) {
+                ctx.status(404).result("ALTCHA not configured");
+                return;
+            }
+            try {
+                ctx.status(200).contentType("application/json").result(mAltchaService.createChallenge().toString());
+            } catch (Exception e) {
+                ctx.status(500).result("Failed to generate challenge");
+            }
+        });
         mApp.post("/register", ctx -> mAdminHandler.createUser(ctx));
         mApp.post("/login", Server::loginS);
         mApp.post("/confirm", ctx -> sInstance.confirmAccount(ctx));

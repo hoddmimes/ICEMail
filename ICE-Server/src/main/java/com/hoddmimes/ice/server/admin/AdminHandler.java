@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.hoddmimes.ice.server.AltchaService;
 import com.hoddmimes.ice.server.DBBase;
 import com.hoddmimes.ice.server.DBException;
 import com.hoddmimes.ice.server.JAux;
@@ -50,11 +51,13 @@ public class AdminHandler {
     private final String mSmtpHost;
     private final int mSmtpPort;
     private final boolean mSmtpStartTls;
+    private final AltchaService mAltchaService;
     private final ConcurrentHashMap<String, LinkedList<Long>> mRegistrationAttempts = new ConcurrentHashMap<>();
 
     public AdminHandler(DBBase db, String baseUrl, String mailDomain, boolean allowRegistration,
                         String internalMailUser, String internalMailPassword,
-                        String smtpHost, int smtpPort, boolean smtpStartTls) {
+                        String smtpHost, int smtpPort, boolean smtpStartTls,
+                        AltchaService altchaService) {
         this.mDb = db;
         this.mBaseUrl = baseUrl;
         this.mMailDomain = mailDomain;
@@ -64,6 +67,7 @@ public class AdminHandler {
         this.mSmtpHost = smtpHost;
         this.mSmtpPort = smtpPort;
         this.mSmtpStartTls = smtpStartTls;
+        this.mAltchaService = altchaService;
     }
 
     private boolean isRateLimited(String ip) {
@@ -179,6 +183,24 @@ public class AdminHandler {
             LOGGER.info("Registration rate limit exceeded for IP: {}", ctx.ip());
             ctx.status(429).result(JAux.statusResponse(429, "Too many registration attempts. Please try again later."));
             return;
+        }
+
+        if (mAltchaService != null) {
+            String body = ctx.body();
+            String altchaPayload = null;
+            try {
+                altchaPayload = JsonParser.parseString(body).getAsJsonObject().get("altcha").getAsString();
+            } catch (Exception ignored) {}
+
+            if (altchaPayload == null || altchaPayload.isEmpty()) {
+                ctx.status(400).result(JAux.statusResponse(400, "CAPTCHA verification required"));
+                return;
+            }
+            if (!mAltchaService.verify(altchaPayload)) {
+                LOGGER.warn("ALTCHA verification failed for IP: {}", ctx.ip());
+                ctx.status(400).result(JAux.statusResponse(400, "CAPTCHA verification failed"));
+                return;
+            }
         }
 
         String rqstJson = ctx.body();

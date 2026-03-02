@@ -59,6 +59,14 @@ function create_account_init() {
                return;
       }
 
+      const altchaWidget = document.getElementById("altcha");
+      const altchaPayload = altchaWidget ? altchaWidget.value : null;
+      if (!altchaPayload) {
+        stsmsg.textContent = "Please complete the CAPTCHA";
+        stsmsg.className = "error";
+        return;
+      }
+
       btn.disabled = true;
 
       try {
@@ -92,7 +100,8 @@ function create_account_init() {
                     'publicKey' : publicKey,
                     'lastSeen' : datestr,
                     'confMail' : confMail,
-                    'confirmed' : false };
+                    'confirmed' : false,
+                    'altcha' : altchaPayload };
 
         const jResponse = await callServer("/register", {
           method: "POST",
@@ -108,6 +117,11 @@ function create_account_init() {
             if (stsMsg && stsMsg.tagName === "DIV") {
                 stsMsg.textContent = `${jResponse.message}`;
                 stsMsg.className = "statusMessage success";
+                document.getElementById("username").value = "";
+                document.getElementById("password").value = "";
+                document.getElementById("password2").value = "";
+                document.getElementById("confMail").value = "";
+                if (altchaWidget) altchaWidget.reset();
             }
         }
 

@@ -36,6 +36,9 @@
     "port" : 12345,
     "bind_address" : "127.0.0.1"
   },
+  "altcha" : {
+    "hmac_key" : "change-this-to-a-long-random-secret"
+  },
   "postfix_after_queue" : {
     "port" : 10026,
     "requeue_port" : 10027,
