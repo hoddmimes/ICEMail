@@ -1,9 +1,5 @@
 ## ICEMail
 
-For the time being using the word ICE is a bit loaded. Last weekend there was a snow storm on the east cost of U.S and
-the weather stations was told to not use the word ICE due to what is currently happening in U.S. However the choice of
-the name is not related to the turnmoil currently taking place.
-
 The ICE is an abbrivation for
 - **I**: Interrelated
 - **C**: Connectivity
@@ -53,6 +49,11 @@ and every piece of sensitive user data is encrypted before it leaves the client.
   When using a standard mail client (Thunderbird, etc.) the ICEMail Bridge running on the user's own machine
   performs decryption locally before handing the message to the client. At no point does plaintext mail cross
   the server.
+  
+   Since all encryption, takes place in the _mail client_, standard mail clients like Outlook, Thunderbird etc. can not connect 
+   and process mail as when using ordinary smtp/imap servers. Therefor there is a simple web interface has been provided 
+   handling the extended encryption. However, standard mail clients can be used if connect via en [ICEMail Bridge](#icemail-bridge--new-development) 
+
 
 ---
 

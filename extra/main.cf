@@ -76,7 +76,7 @@ smtpd_delay_reject = yes
 
 virtual_transport = lmtp:inet:127.0.0.1:24
 virtual_mailbox_domains = koxnan.com
-
+virtual_alias_maps = hash:/etc/postfix/virtual
 
 smtpd_helo_restrictions =
     permit_mynetworks,
