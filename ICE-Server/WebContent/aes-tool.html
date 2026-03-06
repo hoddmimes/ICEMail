@@ -228,6 +228,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         try {
+            // AES-256-CBC with PKCS7 padding. Passphrase is derived using EVP_BytesToKey (OpenSSL-compatible, MD5-based).
             const encrypted = CryptoJS.AES.encrypt(inputText.value, passphrase).toString();
             outputText.value = encrypted;
             setStatus("Encrypted successfully.", "success");

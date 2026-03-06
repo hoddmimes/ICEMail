@@ -1,5 +1,6 @@
 package com.hoddmimes.ice.postfix_filter;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.hoddmimes.ice.server.DBSqlite3;
@@ -9,6 +10,7 @@ import org.apache.logging.log4j.Logger;
 
 import jakarta.mail.BodyPart;
 import jakarta.mail.Multipart;
+import jakarta.mail.Part;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeUtility;
@@ -19,6 +21,7 @@ import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 public class PostfixAfterQueueFilter extends Thread {
@@ -271,10 +274,28 @@ public class PostfixAfterQueueFilter extends Thread {
             String sender = extractHeader(headers, "From");
             if (sender == null) sender = from;
 
+            // Extract attachments from the multipart message (if any)
+            String attachmentsJson = null;
+            try {
+                byte[] rawMsg = (headers + "\r\n\r\n" + body).getBytes(StandardCharsets.ISO_8859_1);
+                Session session = Session.getDefaultInstance(new java.util.Properties());
+                MimeMessage mimeMsg = new MimeMessage(session, new ByteArrayInputStream(rawMsg));
+                Object content = mimeMsg.getContent();
+                if (content instanceof Multipart) {
+                    JsonArray attachments = extractAttachments((Multipart) content);
+                    if (attachments.size() > 0) {
+                        attachmentsJson = attachments.toString();
+                        LOGGER.info("After-queue filter: extracted {} attachment(s) for UID {}", attachments.size(), iceUid);
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.warn("After-queue filter: failed to extract attachments for UID {}: {}", iceUid, e.getMessage());
+            }
+
             DBSqlite3 db = new DBSqlite3(sDbFile);
             try {
                 db.connect();
-                db.saveDecryptMessage(iceUid, encryptedBody, sender);
+                db.saveDecryptMessage(iceUid, encryptedBody, sender, attachmentsJson);
                 LOGGER.info("After-queue filter: saved decrypt message with UID {}", iceUid);
             } finally {
                 db.close();
@@ -392,6 +413,52 @@ public class PostfixAfterQueueFilter extends Thread {
 
             if (plainText != null) return plainText;
             return htmlText; // may be null — caller handles that
+        }
+
+        private JsonArray extractAttachments(Multipart multipart) throws Exception {
+            JsonArray result = new JsonArray();
+            for (int i = 0; i < multipart.getCount(); i++) {
+                BodyPart part = multipart.getBodyPart(i);
+                String ct = part.getContentType().toLowerCase();
+                String disposition = part.getDisposition();
+
+                boolean isAttachment = Part.ATTACHMENT.equalsIgnoreCase(disposition);
+                boolean isInlineNonText = Part.INLINE.equalsIgnoreCase(disposition) && !ct.startsWith("text/");
+                boolean isNonText = disposition == null && !ct.startsWith("text/") && !(part.getContent() instanceof Multipart);
+
+                if (isAttachment || isInlineNonText || isNonText) {
+                    try {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        part.getDataHandler().writeTo(baos);
+                        String base64Data = Base64.getEncoder().encodeToString(baos.toByteArray());
+
+                        String filename = part.getFileName();
+                        if (filename == null || filename.isEmpty()) {
+                            filename = "attachment_" + i;
+                        }
+
+                        String baseType = ct;
+                        int semicolonIdx = baseType.indexOf(';');
+                        if (semicolonIdx > 0) {
+                            baseType = baseType.substring(0, semicolonIdx).trim();
+                        }
+
+                        JsonObject att = new JsonObject();
+                        att.addProperty("filename", filename);
+                        att.addProperty("contentType", baseType);
+                        att.addProperty("data", base64Data);
+                        result.add(att);
+                    } catch (Exception e) {
+                        LOGGER.warn("After-queue filter: failed to read attachment part {}: {}", i, e.getMessage());
+                    }
+                } else if (part.getContent() instanceof Multipart) {
+                    JsonArray nested = extractAttachments((Multipart) part.getContent());
+                    for (int j = 0; j < nested.size(); j++) {
+                        result.add(nested.get(j));
+                    }
+                }
+            }
+            return result;
         }
 
         private String extractHeader(String headers, String headerName) {

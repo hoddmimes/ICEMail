@@ -454,25 +454,43 @@ public class DBSqlite3 implements DBBase
                 " (uid TEXT PRIMARY KEY," +
                 "encrypted_body TEXT NOT NULL," +
                 "sender TEXT," +
-                "created TEXT NOT NULL);";
+                "created TEXT NOT NULL," +
+                "attachments TEXT);";
 
         try (Statement stmt = mConnection.createStatement()) {
             stmt.execute(sql);
+            // Migrate existing tables that lack the attachments column
+            ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + DB_TABLE_DECRYPT_MESSAGES + ")");
+            boolean hasAttachments = false;
+            while (rs.next()) {
+                if ("attachments".equals(rs.getString("name"))) {
+                    hasAttachments = true;
+                    break;
+                }
+            }
+            if (!hasAttachments) {
+                stmt.execute("ALTER TABLE " + DB_TABLE_DECRYPT_MESSAGES + " ADD COLUMN attachments TEXT");
+            }
         } catch (SQLException e) {
             throw new DBException("Failed to create decrypt_messages table", e);
         }
     }
 
     @Override
-    public void saveDecryptMessage(String uid, String encryptedBody, String sender) throws DBException {
+    public void saveDecryptMessage(String uid, String encryptedBody, String sender, String attachmentsJson) throws DBException {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-        String sql = "INSERT INTO " + DB_TABLE_DECRYPT_MESSAGES + " (uid, encrypted_body, sender, created) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO " + DB_TABLE_DECRYPT_MESSAGES + " (uid, encrypted_body, sender, created, attachments) VALUES (?, ?, ?, ?, ?)";
 
         try (PreparedStatement stmt = mConnection.prepareStatement(sql)) {
             stmt.setString(1, uid);
             stmt.setString(2, encryptedBody);
             stmt.setString(3, sender);
             stmt.setString(4, sdf.format(System.currentTimeMillis()));
+            if (attachmentsJson != null) {
+                stmt.setString(5, attachmentsJson);
+            } else {
+                stmt.setNull(5, Types.VARCHAR);
+            }
             stmt.executeUpdate();
         } catch (SQLException e) {
             throw new DBException("Failed to save decrypt message", e);
@@ -492,6 +510,10 @@ public class DBSqlite3 implements DBBase
                     result.addProperty("encrypted_body", rs.getString("encrypted_body"));
                     result.addProperty("sender", rs.getString("sender"));
                     result.addProperty("created", rs.getString("created"));
+                    String attachments = rs.getString("attachments");
+                    if (attachments != null) {
+                        result.addProperty("attachments", attachments);
+                    }
                     return result;
                 }
                 return null;

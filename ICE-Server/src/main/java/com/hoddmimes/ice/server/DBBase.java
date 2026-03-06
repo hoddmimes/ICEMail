@@ -16,7 +16,7 @@ public interface DBBase
     public void createUser( JsonObject pUserProfile ) throws DBException;
     public void deleteUser( String pUsername ) throws DBException;
 
-    public void saveDecryptMessage( String uid, String encryptedBody, String sender ) throws DBException;
+    public void saveDecryptMessage( String uid, String encryptedBody, String sender, String attachmentsJson ) throws DBException;
     public JsonObject findDecryptMessage( String uid ) throws DBException;
     public String findUserPublicKey( String username ) throws DBException;
 }
