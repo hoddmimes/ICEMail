@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AES-256 Encrypt / Decrypt</title>
+    <link rel="stylesheet" type="text/css" href="./css/aux.css">
+    <style>
+        body {
+            align-items: flex-start;
+            padding: 2rem 1rem;
+        }
+
+        .card {
+            background: white;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: #1a1a2e;
+            text-align: center;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 0.6rem;
+            font-size: 0.95rem;
+            font-family: monospace;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        input[type="password"], input[type="text"] {
+            width: 100%;
+            padding: 0.6rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        button {
+            flex: 1;
+            padding: 0.7rem;
+            font-size: 1rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: default;
+        }
+
+        #btnDecrypt {
+            background: #28a745;
+        }
+
+        #btnDecrypt:hover:not(:disabled) {
+            background: #1e7e34;
+        }
+
+        .passphrase-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .passphrase-row input {
+            flex: 1;
+        }
+
+        .toggle-pass {
+            flex: none;
+            width: auto;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.85rem;
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .toggle-pass:hover {
+            background: #e0e0e0;
+        }
+
+        .back-link {
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .back-link a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+
+        .notice {
+            font-size: 0.85rem;
+            color: #856404;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 0.6rem 0.8rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>AES-256 Encrypt / Decrypt</h1>
+
+    <div class="notice">
+        All encryption and decryption is performed locally in your browser. No data is sent to the server.
+    </div>
+
+    <div>
+        <label for="passphraseInput">Passphrase</label>
+        <div class="passphrase-row">
+            <input type="password" id="passphraseInput" placeholder="Enter passphrase" autocomplete="off" />
+            <button type="button" class="toggle-pass" id="togglePass">Show</button>
+        </div>
+    </div>
+
+    <div>
+        <label for="inputText">Input</label>
+        <textarea id="inputText" placeholder="Enter text to encrypt or decrypt..."></textarea>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" id="btnEncrypt" disabled>Encrypt</button>
+        <button type="button" id="btnDecrypt" disabled>Decrypt</button>
+    </div>
+
+    <div>
+        <label for="outputText">Output</label>
+        <textarea id="outputText" readonly placeholder="Result will appear here..."></textarea>
+    </div>
+
+    <div id="statusMsg" class="statusMessage"></div>
+
+    <div class="back-link"><a href="./index.html">&larr; Back to ICEMail</a></div>
+</div>
+
+<script src="./js/crypto-js.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const inputText    = document.getElementById("inputText");
+    const outputText   = document.getElementById("outputText");
+    const passInput    = document.getElementById("passphraseInput");
+    const btnEncrypt   = document.getElementById("btnEncrypt");
+    const btnDecrypt   = document.getElementById("btnDecrypt");
+    const togglePass   = document.getElementById("togglePass");
+    const statusMsg    = document.getElementById("statusMsg");
+
+    function updateButtons() {
+        const hasInput = inputText.value.trim().length > 0;
+        btnEncrypt.disabled = !hasInput;
+        btnDecrypt.disabled = !hasInput;
+    }
+
+    inputText.addEventListener("input", updateButtons);
+
+    togglePass.addEventListener("click", () => {
+        if (passInput.type === "password") {
+            passInput.type = "text";
+            togglePass.textContent = "Hide";
+        } else {
+            passInput.type = "password";
+            togglePass.textContent = "Show";
+        }
+    });
+
+    function setStatus(msg, type) {
+        statusMsg.textContent = msg;
+        statusMsg.className = "statusMessage" + (type ? " " + type : "");
+    }
+
+    btnEncrypt.addEventListener("click", () => {
+        const passphrase = passInput.value;
+        if (!passphrase) {
+            setStatus("Please enter a passphrase.", "error");
+            return;
+        }
+        try {
+            const encrypted = CryptoJS.AES.encrypt(inputText.value, passphrase).toString();
+            outputText.value = encrypted;
+            setStatus("Encrypted successfully.", "success");
+        } catch (e) {
+            setStatus("Encryption failed: " + e.message, "error");
+        }
+    });
+
+    btnDecrypt.addEventListener("click", () => {
+        const passphrase = passInput.value;
+        if (!passphrase) {
+            setStatus("Please enter a passphrase.", "error");
+            return;
+        }
+        try {
+            const bytes = CryptoJS.AES.decrypt(inputText.value.trim(), passphrase);
+            const plaintext = bytes.toString(CryptoJS.enc.Utf8);
+            if (!plaintext) {
+                setStatus("Decryption failed. Wrong passphrase or invalid ciphertext.", "error");
+                return;
+            }
+            outputText.value = plaintext;
+            setStatus("Decrypted successfully.", "success");
+        } catch (e) {
+            setStatus("Decryption failed: wrong passphrase or invalid input.", "error");
+        }
+    });
+});
+</script>
+
+</body>
+</html>
