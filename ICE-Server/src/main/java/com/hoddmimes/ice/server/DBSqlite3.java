@@ -524,6 +524,17 @@ public class DBSqlite3 implements DBBase
     }
 
     @Override
+    public int deleteExpiredDecryptMessages(int ttlHours) throws DBException {
+        String sql = "DELETE FROM " + DB_TABLE_DECRYPT_MESSAGES +
+                " WHERE created < datetime('now', '-" + ttlHours + " hours')";
+        try (Statement stmt = mConnection.createStatement()) {
+            return stmt.executeUpdate(sql);
+        } catch (SQLException e) {
+            throw new DBException("Failed to delete expired decrypt messages", e);
+        }
+    }
+
+    @Override
     public String findUserPublicKey(String username) throws DBException {
         String sql = "SELECT " + Profile.PUBLIC_KEY + " FROM " + DB_TABLE_PROFILE + " WHERE " + Profile.USERNAME + " = ?";
         try (PreparedStatement stmt = mConnection.prepareStatement(sql)) {

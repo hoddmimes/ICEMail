@@ -43,6 +43,9 @@ import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 public class Server
@@ -88,6 +91,9 @@ public class Server
     String      mInternalMailSmtpHost = "localhost";
     int         mInternalMailSmtpPort = 25;
     boolean     mInternalMailStartTls = false;
+
+    // Decrypt message TTL (hours); default 72
+    int mDecryptMessageTtlHours = 72;
 
     // Dovecot SASL server
     DovecotSaslServer mSaslServer;
@@ -187,6 +193,13 @@ public class Server
                 }
                 if (jMailer.has("starttls")) {
                     mInternalMailStartTls = jMailer.get("starttls").getAsBoolean();
+                }
+            }
+
+            if (jConfig.has("postfix_after_queue")) {
+                JsonObject jAfterQueue = jConfig.get("postfix_after_queue").getAsJsonObject();
+                if (jAfterQueue.has("decrypt_message_ttl_hours")) {
+                    mDecryptMessageTtlHours = jAfterQueue.get("decrypt_message_ttl_hours").getAsInt();
                 }
             }
 
@@ -774,6 +787,25 @@ public class Server
         ctx.status(200).contentType("application/json").result(response.toString());
     }
 
+    private void startDecryptMessageCleanup() {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "decrypt-message-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                int deleted = db.deleteExpiredDecryptMessages(mDecryptMessageTtlHours);
+                if (deleted > 0) {
+                    LOGGER.info("Decrypt message cleanup: removed {} expired message(s) (ttl={}h)", deleted, mDecryptMessageTtlHours);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Decrypt message cleanup failed: {}", e.getMessage());
+            }
+        }, 15, 15, TimeUnit.MINUTES);
+        LOGGER.info("Decrypt message cleanup scheduled every 15 minutes (ttl={}h)", mDecryptMessageTtlHours);
+    }
+
     private void loadAfterQueueFilter() {
         if (!jConfig.has("postfix_after_queue")) return;
 
@@ -793,6 +825,7 @@ public class Server
             sInstance.loadDB();
             sInstance.loadSasl();
             sInstance.loadAfterQueueFilter();
+            sInstance.startDecryptMessageCleanup();
             sInstance.loadApp();
             sInstance.declare();
             sInstance.run();

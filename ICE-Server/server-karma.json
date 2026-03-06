@@ -42,6 +42,7 @@
   "postfix_after_queue" : {
     "port" : 10026,
     "requeue_port" : 10027,
-    "enabled" : true
+    "enabled" : true,
+    "decrypt_message_ttl_hours" : 72
   }
 }

@@ -18,5 +18,6 @@ public interface DBBase
 
     public void saveDecryptMessage( String uid, String encryptedBody, String sender, String attachmentsJson ) throws DBException;
     public JsonObject findDecryptMessage( String uid ) throws DBException;
+    public int deleteExpiredDecryptMessages( int ttlHours ) throws DBException;
     public String findUserPublicKey( String username ) throws DBException;
 }

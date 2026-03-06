@@ -20,8 +20,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Date;
 import java.util.List;
 
 public class PostfixAfterQueueFilter extends Thread {
@@ -34,6 +36,7 @@ public class PostfixAfterQueueFilter extends Thread {
     private static String sDbFile;
     private static String sBaseUrl;
     private static String sMailDomain;
+    private static int sDecryptMessageTtlHours = 72;
 
     /**
      * Standalone constructor — reads its own config file.
@@ -64,6 +67,13 @@ public class PostfixAfterQueueFilter extends Thread {
 
         if (jConfig.has("mail_domain")) {
             sMailDomain = jConfig.get("mail_domain").getAsString();
+        }
+
+        if (jConfig.has("postfix_after_queue")) {
+            JsonObject jAfterQueue = jConfig.get("postfix_after_queue").getAsJsonObject();
+            if (jAfterQueue.has("decrypt_message_ttl_hours")) {
+                sDecryptMessageTtlHours = jAfterQueue.get("decrypt_message_ttl_hours").getAsInt();
+            }
         }
 
         JsonObject jDatabase = jConfig.get("database").getAsJsonObject();
@@ -301,11 +311,14 @@ public class PostfixAfterQueueFilter extends Thread {
                 db.close();
             }
 
-            String link     = sBaseUrl + "/decrypt.html?uid=" + iceUid;
+            String link = sBaseUrl + "/decrypt.html?uid=" + iceUid;
+            long expiryMs = System.currentTimeMillis() + (long) sDecryptMessageTtlHours * 3600 * 1000;
+            String expiryStr = new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(expiryMs));
             String htmlBody = "<html><body>" +
                     "<p>You have received an encrypted message.</p>" +
                     "<p>To read this message, open the following link and enter the password provided by the sender:</p>" +
                     "<p><a href=\"" + link + "\">" + link + "</a></p>" +
+                    "<p style=\"color:#888;font-size:0.9em;\">This message will be available until <strong>" + expiryStr + "</strong> (server time), after which it will be permanently deleted.</p>" +
                     "</body></html>";
 
             StringBuilder newHeaders = new StringBuilder();
