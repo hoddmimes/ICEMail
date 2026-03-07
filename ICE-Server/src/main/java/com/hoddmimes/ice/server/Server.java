@@ -396,7 +396,13 @@ public class Server
                 }
 
                 LOGGER.info("User \"{}\" logged in successfully", username);
-                ctx.status(200).result(JAux.statusResponse(200, "Login successful"));
+                JsonObject jLoginResponse = new JsonObject();
+                jLoginResponse.addProperty("status", 200);
+                jLoginResponse.addProperty("message", "Login successful");
+                if (jUser.has(Profile.PRIVATE_KEY) && !jUser.get(Profile.PRIVATE_KEY).isJsonNull()) {
+                    jLoginResponse.addProperty("privateKey", jUser.get(Profile.PRIVATE_KEY).getAsString());
+                }
+                ctx.status(200).contentType("application/json").result(jLoginResponse.toString());
 
             } catch (DBException e) {
                 LOGGER.warn("Login failed for user \"{}\": {}", username, e.getMessage());

@@ -31,11 +31,17 @@ public class BridgeConfiguration
 	private String imapHost = "localhost";
 	private int imapPort = 993;
 
-	// Decryptor implementation class name
-	private String decryptorClass = "com.hoddmimes.icemail.bridge.PassthroughDecryptor";
+	// Whether to decrypt messages passing through the bridge
+	private boolean decryptEnabled = false;
+
+	// ICEMail server base URL used by BridgeServerLoginHandler to fetch the encrypted private key
+	private String serverBaseUrl = "https://localhost:8282";
+
+	// Decryptor implementation class name (used when decryptEnabled = true)
+	private String decryptorClass = "com.hoddmimes.icemail.bridge.MailDecryptor";
 
 	// Login handler implementation class name
-	private String loginHandlerClass = "com.hoddmimes.icemail.bridge.PassthroughLoginHandler";
+	private String loginHandlerClass = "com.hoddmimes.icemail.bridge.BridgeServerLoginHandler";
 
 	// SMTP submission proxy settings
 	private boolean smtpEnabled = false;
@@ -77,12 +83,18 @@ public class BridgeConfiguration
 	}
 
 	/**
-	 * Create a Decryptor instance based on the configured class name.
+	 * Create a Decryptor instance per session.
+	 * Returns PassthroughDecryptor when decryptEnabled is false.
 	 *
-	 * @return Decryptor instance, or PassthroughDecryptor if instantiation fails
+	 * @return Decryptor instance
 	 */
 	public Decryptor createDecryptor()
 	{
+		if( !decryptEnabled)
+		{
+			return new PassthroughDecryptor();
+		}
+
 		try
 		{
 			Class<?> clazz = Class.forName( decryptorClass);
@@ -111,6 +123,7 @@ public class BridgeConfiguration
 
 	/**
 	 * Create a LoginHandler instance based on the configured class name.
+	 * Passes serverBaseUrl via initialize() so the handler can reach the ICEMail server.
 	 *
 	 * @return LoginHandler instance, or PassthroughLoginHandler if instantiation fails
 	 */
@@ -126,6 +139,7 @@ public class BridgeConfiguration
 			}
 
 			LoginHandler handler = (LoginHandler) clazz.getDeclaredConstructor().newInstance();
+			handler.initialize( serverBaseUrl);
 			MailBridge.log( Level.INFO, "Created login handler instance: " + loginHandlerClass);
 			return handler;
 		}
@@ -196,6 +210,16 @@ public class BridgeConfiguration
 	public int getImapPort()
 	{
 		return imapPort;
+	}
+
+	public boolean isDecryptEnabled()
+	{
+		return decryptEnabled;
+	}
+
+	public String getServerBaseUrl()
+	{
+		return serverBaseUrl;
 	}
 
 	public String getDecryptorClass()
@@ -322,6 +346,8 @@ public class BridgeConfiguration
 			", imapsKeyPath='" + imapsKeyPath + '\'' +
 			", imapHost='" + imapHost + '\'' +
 			", imapPort=" + imapPort +
+			", decryptEnabled=" + decryptEnabled +
+			", serverBaseUrl='" + serverBaseUrl + '\'' +
 			", decryptorClass='" + decryptorClass + '\'' +
 			", loginHandlerClass='" + loginHandlerClass + '\'' +
 			", smtpEnabled=" + smtpEnabled +

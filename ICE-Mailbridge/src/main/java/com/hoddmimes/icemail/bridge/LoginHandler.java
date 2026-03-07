@@ -43,11 +43,18 @@ public interface LoginHandler
 		private final String blockReason;
 
 		/**
+		 * The user's encrypted private key returned by the ICEMail server on successful login.
+		 * Base64-encoded PGP-symmetric-encrypted armored PGP private key.
+		 * Null if the server did not return one (e.g. passthrough handler).
+		 */
+		private final String encryptedPrivateKey;
+
+		/**
 		 * Create a pass-through result (unchanged credentials).
 		 */
 		public static LoginResult passthrough( String username, String password)
 		{
-			return new LoginResult( username, password, false, false, null);
+			return new LoginResult( username, password, false, false, null, null);
 		}
 
 		/**
@@ -55,7 +62,15 @@ public interface LoginHandler
 		 */
 		public static LoginResult modified( String newUsername, String newPassword)
 		{
-			return new LoginResult( newUsername, newPassword, true, false, null);
+			return new LoginResult( newUsername, newPassword, true, false, null, null);
+		}
+
+		/**
+		 * Create a modified result with new credentials and an encrypted private key.
+		 */
+		public static LoginResult modified( String newUsername, String newPassword, String encryptedPrivateKey)
+		{
+			return new LoginResult( newUsername, newPassword, true, false, null, encryptedPrivateKey);
 		}
 
 		/**
@@ -63,16 +78,17 @@ public interface LoginHandler
 		 */
 		public static LoginResult blocked( String reason)
 		{
-			return new LoginResult( null, null, false, true, reason);
+			return new LoginResult( null, null, false, true, reason, null);
 		}
 
-		private LoginResult( String username, String password, boolean modified, boolean blocked, String blockReason)
+		private LoginResult( String username, String password, boolean modified, boolean blocked, String blockReason, String encryptedPrivateKey)
 		{
 			this.username = username;
 			this.password = password;
 			this.modified = modified;
 			this.blocked = blocked;
 			this.blockReason = blockReason;
+			this.encryptedPrivateKey = encryptedPrivateKey;
 		}
 
 		public String getUsername()
@@ -98,6 +114,11 @@ public interface LoginHandler
 		public String getBlockReason()
 		{
 			return blockReason;
+		}
+
+		public String getEncryptedPrivateKey()
+		{
+			return encryptedPrivateKey;
 		}
 
 		/**

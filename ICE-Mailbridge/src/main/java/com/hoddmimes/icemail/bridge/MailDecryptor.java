@@ -1,219 +1,359 @@
 /**
  * PGP-based decryption implementation.
- * Decrypts encrypted email subjects and bodies using the user's private key.
+ *
+ * At login time, initialize() is called with:
+ *   - encryptedPrivateKey: Base64( PGP-symmetric-encrypted( armored-PGP-secret-key ) )
+ *   - plaintextPassword:   the user's plaintext password
+ *
+ * The password is used twice:
+ *   1. To decrypt the outer PGP symmetric wrapper → armored PGP secret key
+ *   2. As the PGP key passphrase to unlock the secret key for decryption
+ *
+ * Mail bodies are decrypted by replacing the PGP MESSAGE block with plaintext.
+ * Encrypted subjects (ENC:ICE:<base64>) are decrypted in ENVELOPE and header lines.
  */
 
 package com.hoddmimes.icemail.bridge;
 
+import org.apache.logging.log4j.Level;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openpgp.*;
+import org.bouncycastle.openpgp.operator.bc.*;
+import org.bouncycastle.openpgp.PGPPBEEncryptedData;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.Security;
+import java.util.Base64;
+import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.logging.log4j.Level;
-
 public class MailDecryptor implements Decryptor
 {
+	static
+	{
+		if( Security.getProvider( BouncyCastleProvider.PROVIDER_NAME) == null)
+		{
+			Security.addProvider( new BouncyCastleProvider());
+		}
+	}
+
 	// Pattern to match encrypted subject: ENC:ICE:<base64 encrypted data>
 	private static final Pattern ENCRYPTED_SUBJECT_PATTERN =
 		Pattern.compile( ImapResponseHandler.ENCRYPTED_SUBJECT_PREFIX + "([A-Za-z0-9+/=]+)");
 
 	// Pattern to match Subject header line
 	private static final Pattern SUBJECT_HEADER_PATTERN =
-		Pattern.compile("(Subject:\\s*)" + ImapResponseHandler.ENCRYPTED_SUBJECT_PREFIX + "([A-Za-z0-9+/=]+)");
+		Pattern.compile( "(Subject:\\s*)" + ImapResponseHandler.ENCRYPTED_SUBJECT_PREFIX + "([A-Za-z0-9+/=]+)");
 
 	// Pattern to match PGP encrypted message block
 	private static final Pattern PGP_MESSAGE_PATTERN =
-		Pattern.compile("-----BEGIN PGP MESSAGE-----(.*?)-----END PGP MESSAGE-----", Pattern.DOTALL);
+		Pattern.compile( "-----BEGIN PGP MESSAGE-----(.*?)-----END PGP MESSAGE-----", Pattern.DOTALL);
 
-	// User's private key for decryption (to be initialized)
-	private String privateKey = null;
+	private String armoredPrivateKey = null;
 	private String passphrase = null;
+	private boolean ready = false;
 
 	public MailDecryptor()
 	{
-		// TODO: Initialize with user credentials/key
 	}
 
 	@Override
-	public void initialize( String privateKey, String passphrase)
+	public void initialize( String encryptedPrivateKey, String plaintextPassword)
 	{
-		this.privateKey = privateKey;
-		this.passphrase = passphrase;
-		MailBridge.log( Level.INFO, "MailDecryptor initialized with private key");
+		if( encryptedPrivateKey == null || plaintextPassword == null)
+		{
+			MailBridge.log( Level.WARN, "MailDecryptor.initialize: null arguments, decryption disabled");
+			return;
+		}
+
+		try
+		{
+			// 1. Base64-decode the encrypted private key blob
+			byte[] encryptedBytes = Base64.getDecoder().decode( encryptedPrivateKey);
+
+			// 2. PGP-decrypt the outer symmetric wrapper with the plaintext password
+			String armored = pgpSymmetricDecrypt( encryptedBytes, plaintextPassword);
+			if( armored == null)
+			{
+				MailBridge.log( Level.ERROR, "MailDecryptor: failed to decrypt private key wrapper");
+				return;
+			}
+
+			this.armoredPrivateKey = armored;
+			this.passphrase = plaintextPassword;
+			this.ready = true;
+			MailBridge.log( Level.INFO, "MailDecryptor: private key unlocked successfully");
+		}
+		catch( Exception e)
+		{
+			MailBridge.log( Level.ERROR, "MailDecryptor.initialize failed", e);
+		}
 	}
 
 	@Override
 	public boolean isReady()
 	{
-		return privateKey != null && passphrase != null;
+		return ready;
 	}
 
 	@Override
 	public String decryptSubjectInEnvelope( String envelopeLine)
 	{
-		MailBridge.log( Level.DEBUG, "Entry point: decryptSubjectInEnvelope");
-
-		// Check if there's an encrypted subject in the envelope
 		Matcher matcher = ENCRYPTED_SUBJECT_PATTERN.matcher( envelopeLine);
 		if( !matcher.find())
 		{
-			return envelopeLine; // No encrypted subject found, pass through
-		}
-
-		// If decryption not configured, pass through unchanged
-		if( !isReady())
-		{
-			MailBridge.log( Level.DEBUG, "Decryption not configured, passing through unchanged");
 			return envelopeLine;
 		}
 
-		String encryptedData = matcher.group(1);
-		MailBridge.log( Level.DEBUG, "Found encrypted subject in ENVELOPE: " + encryptedData.substring(0, Math.min(20, encryptedData.length())) + "...");
+		if( !isReady())
+		{
+			return envelopeLine;
+		}
 
+		String encryptedData = matcher.group( 1);
 		String decryptedSubject = decryptSubjectData( encryptedData);
 		if( decryptedSubject == null)
 		{
-			return envelopeLine; // Decryption failed, pass through unchanged
+			return envelopeLine;
 		}
 
-		// Replace encrypted subject with decrypted one in the envelope
-		String result = envelopeLine.replace(
+		return envelopeLine.replace(
 			ImapResponseHandler.ENCRYPTED_SUBJECT_PREFIX + encryptedData,
 			decryptedSubject);
-
-		MailBridge.log( Level.DEBUG, "Decrypted ENVELOPE subject successfully");
-		return result;
 	}
 
 	@Override
 	public String decryptSubjectInHeader( String headerLine)
 	{
-		MailBridge.log( Level.DEBUG, "Entry point: decryptSubjectInHeader");
-
 		Matcher matcher = SUBJECT_HEADER_PATTERN.matcher( headerLine);
 		if( !matcher.find())
 		{
-			return headerLine; // No encrypted subject, pass through
-		}
-
-		// If decryption not configured, pass through unchanged
-		if( !isReady())
-		{
-			MailBridge.log( Level.DEBUG, "Decryption not configured, passing through unchanged");
 			return headerLine;
 		}
 
-		String prefix = matcher.group(1); // "Subject: " or "Subject:\t"
-		String encryptedData = matcher.group(2);
+		if( !isReady())
+		{
+			return headerLine;
+		}
 
-		MailBridge.log( Level.DEBUG, "Found encrypted subject in header: " + encryptedData.substring(0, Math.min(20, encryptedData.length())) + "...");
+		String prefix = matcher.group( 1);
+		String encryptedData = matcher.group( 2);
 
 		String decryptedSubject = decryptSubjectData( encryptedData);
 		if( decryptedSubject == null)
 		{
-			return headerLine; // Decryption failed, pass through unchanged
+			return headerLine;
 		}
 
-		String result = matcher.replaceFirst( prefix + decryptedSubject);
-		MailBridge.log( Level.DEBUG, "Decrypted header subject successfully");
-		return result;
+		return matcher.replaceFirst( prefix + decryptedSubject);
 	}
 
 	@Override
 	public String decryptBody( String content)
 	{
-		MailBridge.log( Level.DEBUG, "Entry point: decryptBody");
+		if( !isReady())
+		{
+			return content;
+		}
 
 		Matcher matcher = PGP_MESSAGE_PATTERN.matcher( content);
 		if( !matcher.find())
 		{
-			MailBridge.log( Level.DEBUG, "No PGP message block found in body");
-			return content; // No encrypted content, pass through
-		}
-
-		// If decryption not configured, pass through unchanged
-		if( !isReady())
-		{
-			MailBridge.log( Level.DEBUG, "Decryption not configured, passing through unchanged");
 			return content;
 		}
 
-		String pgpMessage = matcher.group(0); // Full PGP block including headers
-		MailBridge.log( Level.DEBUG, "Found PGP message block, length: " + pgpMessage.length());
+		String pgpBlock = matcher.group( 0);
+		MailBridge.log( Level.DEBUG, "MailDecryptor: found PGP block, decrypting body");
 
-		String decryptedBody = decryptPgpMessage( pgpMessage);
-		if( decryptedBody == null)
+		try
 		{
-			return content; // Decryption failed, pass through unchanged
+			String decryptedBody = pgpDecrypt( pgpBlock, armoredPrivateKey, passphrase);
+			if( decryptedBody == null)
+			{
+				return content;
+			}
+			return content.replace( pgpBlock, decryptedBody);
 		}
-
-		String result = content.replace( pgpMessage, decryptedBody);
-		MailBridge.log( Level.DEBUG, "Decrypted body successfully");
-		return result;
+		catch( Exception e)
+		{
+			MailBridge.log( Level.ERROR, "MailDecryptor: body decryption failed", e);
+			return content;
+		}
 	}
 
 	/**
-	 * Decrypt the encrypted subject data.
+	 * Decrypt the outer PGP symmetric-password-encrypted wrapper.
+	 * The wrapper was created by OpenPGP.js: openpgp.encrypt({ passwords: [password] }).
+	 * The plaintext inside is the armored PGP secret key.
+	 */
+	private String pgpSymmetricDecrypt( byte[] encryptedData, String password) throws Exception
+	{
+		// Determine if the data is binary PGP (high bit set on first byte) or ASCII-armored.
+		// We bypass PGPUtil.getDecoderStream() to avoid a hang in BouncyCastle 1.80 on binary data.
+		boolean isBinary = (encryptedData[0] & 0x80) != 0;
+		MailBridge.log( Level.DEBUG, "pgpSymmetricDecrypt: data length=" + encryptedData.length + " format=" + (isBinary ? "binary" : "armored"));
+		InputStream in = isBinary
+			? new ByteArrayInputStream( encryptedData)
+			: PGPUtil.getDecoderStream( new ByteArrayInputStream( encryptedData));
+
+		PGPObjectFactory factory = new PGPObjectFactory( in, new BcKeyFingerprintCalculator());
+
+		Object obj = factory.nextObject();
+		PGPEncryptedDataList encList;
+		if( obj instanceof PGPEncryptedDataList)
+		{
+			encList = (PGPEncryptedDataList) obj;
+		}
+		else
+		{
+			encList = (PGPEncryptedDataList) factory.nextObject();
+		}
+
+		for( PGPEncryptedData ed : encList)
+		{
+			if( ed instanceof PGPPBEEncryptedData)
+			{
+				PGPPBEEncryptedData pbe = (PGPPBEEncryptedData) ed;
+				InputStream decryptedStream = pbe.getDataStream(
+					new BcPBEDataDecryptorFactory( password.toCharArray(), new BcPGPDigestCalculatorProvider()));
+
+				PGPObjectFactory plainFactory = new PGPObjectFactory( decryptedStream, new BcKeyFingerprintCalculator());
+				Object plainObj = plainFactory.nextObject();
+
+				if( plainObj instanceof PGPLiteralData)
+				{
+					PGPLiteralData ld = (PGPLiteralData) plainObj;
+					byte[] data = ld.getInputStream().readAllBytes();
+					return new String( data, StandardCharsets.UTF_8);
+				}
+				else if( plainObj instanceof PGPCompressedData)
+				{
+					PGPCompressedData cd = (PGPCompressedData) plainObj;
+					PGPObjectFactory compFactory = new PGPObjectFactory( cd.getDataStream(), new BcKeyFingerprintCalculator());
+					Object compObj = compFactory.nextObject();
+					if( compObj instanceof PGPLiteralData)
+					{
+						PGPLiteralData ld = (PGPLiteralData) compObj;
+						byte[] data = ld.getInputStream().readAllBytes();
+						return new String( data, StandardCharsets.UTF_8);
+					}
+				}
+			}
+		}
+
+		MailBridge.log( Level.WARN, "pgpSymmetricDecrypt: no PBE encrypted data found in PGP object");
+		return null;
+	}
+
+	/**
+	 * Decrypt a PGP public-key-encrypted message using the user's private key.
 	 *
-	 * TODO: Implement actual decryption logic using the user's private key.
-	 * The encrypted data is expected to be base64-encoded ciphertext.
-	 *
-	 * @param encryptedBase64 Base64-encoded encrypted subject
-	 * @return Decrypted subject text, or null on failure
+	 * @param armoredMessage    Full PGP MESSAGE block (armored)
+	 * @param armoredSecretKey  Armored PGP secret key ring
+	 * @param passphrase        Passphrase to unlock the secret key
+	 * @return Decrypted plaintext, or null on failure
+	 */
+	private String pgpDecrypt( String armoredMessage, String armoredSecretKey, String passphrase) throws Exception
+	{
+		// Load secret key ring
+		InputStream keyIn = PGPUtil.getDecoderStream(
+			new ByteArrayInputStream( armoredSecretKey.getBytes( StandardCharsets.UTF_8)));
+		PGPSecretKeyRingCollection secretKeyRings =
+			new PGPSecretKeyRingCollection( keyIn, new BcKeyFingerprintCalculator());
+
+		// Parse the encrypted message
+		InputStream msgIn = PGPUtil.getDecoderStream(
+			new ByteArrayInputStream( armoredMessage.getBytes( StandardCharsets.UTF_8)));
+		PGPObjectFactory factory = new PGPObjectFactory( msgIn, new BcKeyFingerprintCalculator());
+
+		Object obj = factory.nextObject();
+		PGPEncryptedDataList encList;
+		if( obj instanceof PGPEncryptedDataList)
+		{
+			encList = (PGPEncryptedDataList) obj;
+		}
+		else
+		{
+			encList = (PGPEncryptedDataList) factory.nextObject();
+		}
+
+		// Find the public-key encrypted session key that matches our secret key
+		PGPPrivateKey privateKey = null;
+		PGPPublicKeyEncryptedData pked = null;
+
+		Iterator<PGPEncryptedData> it = encList.getEncryptedDataObjects();
+		while( it.hasNext())
+		{
+			PGPEncryptedData ed = it.next();
+			if( ed instanceof PGPPublicKeyEncryptedData)
+			{
+				PGPPublicKeyEncryptedData candidate = (PGPPublicKeyEncryptedData) ed;
+				PGPSecretKey secretKey = secretKeyRings.getSecretKey( candidate.getKeyID());
+				if( secretKey != null)
+				{
+					privateKey = secretKey.extractPrivateKey(
+						new BcPBESecretKeyDecryptorBuilder( new BcPGPDigestCalculatorProvider())
+							.build( passphrase.toCharArray()));
+					pked = candidate;
+					break;
+				}
+			}
+		}
+
+		if( privateKey == null || pked == null)
+		{
+			MailBridge.log( Level.ERROR, "MailDecryptor: no matching private key found for PGP message");
+			return null;
+		}
+
+		// Decrypt the session key and message data
+		InputStream decryptedStream = pked.getDataStream( new BcPublicKeyDataDecryptorFactory( privateKey));
+		PGPObjectFactory plainFactory = new PGPObjectFactory( decryptedStream, new BcKeyFingerprintCalculator());
+
+		Object plainObj = plainFactory.nextObject();
+
+		// Handle optional compression layer
+		if( plainObj instanceof PGPCompressedData)
+		{
+			PGPCompressedData cd = (PGPCompressedData) plainObj;
+			plainFactory = new PGPObjectFactory( cd.getDataStream(), new BcKeyFingerprintCalculator());
+			plainObj = plainFactory.nextObject();
+		}
+
+		if( plainObj instanceof PGPLiteralData)
+		{
+			PGPLiteralData ld = (PGPLiteralData) plainObj;
+			byte[] plainBytes = ld.getInputStream().readAllBytes();
+			MailBridge.log( Level.DEBUG, "MailDecryptor: body decrypted successfully");
+			return new String( plainBytes, StandardCharsets.UTF_8);
+		}
+
+		MailBridge.log( Level.ERROR, "MailDecryptor: unexpected PGP object type after decryption");
+		return null;
+	}
+
+	/**
+	 * Decrypt a base64-encoded encrypted subject.
+	 * The subject is PGP-encrypted with the user's public key (same as the body).
 	 */
 	private String decryptSubjectData( String encryptedBase64)
 	{
-		if( !isReady())
+		try
 		{
-			MailBridge.log( Level.ERROR, "Cannot decrypt: private key not configured");
-			return null;
+			// The encrypted subject is a base64-encoded PGP message
+			byte[] pgpBytes = Base64.getDecoder().decode( encryptedBase64);
+			String armoredSubject = "-----BEGIN PGP MESSAGE-----\n\n" +
+				Base64.getEncoder().encodeToString( pgpBytes) +
+				"\n-----END PGP MESSAGE-----\n";
+
+			return pgpDecrypt( armoredSubject, armoredPrivateKey, passphrase);
 		}
-
-		try {
-			// TODO: Implement decryption
-			// 1. Base64 decode the encrypted data
-			// 2. Decrypt using private key
-			// 3. Return plaintext subject
-
-			MailBridge.log( Level.DEBUG, "TODO: Implement subject decryption");
-
-			// Placeholder - return null to indicate not yet implemented
-			return null;
-
-		} catch( Exception e) {
-			MailBridge.log( Level.ERROR, "Failed to decrypt subject: " + e.getMessage(), e);
-			return null;
-		}
-	}
-
-	/**
-	 * Decrypt a PGP encrypted message.
-	 *
-	 * TODO: Implement actual PGP decryption using the user's private key.
-	 *
-	 * @param pgpMessage Full PGP message block (including BEGIN/END markers)
-	 * @return Decrypted message content, or null on failure
-	 */
-	private String decryptPgpMessage( String pgpMessage)
-	{
-		if( !isReady())
+		catch( Exception e)
 		{
-			MailBridge.log( Level.ERROR, "Cannot decrypt: private key not configured");
-			return null;
-		}
-
-		try {
-			// TODO: Implement PGP decryption
-			// 1. Parse the PGP message
-			// 2. Decrypt using private key and passphrase
-			// 3. Return decrypted content
-
-			MailBridge.log( Level.DEBUG, "TODO: Implement PGP body decryption");
-
-			// Placeholder - return null to indicate not yet implemented
-			return null;
-
-		} catch( Exception e) {
-			MailBridge.log( Level.ERROR, "Failed to decrypt PGP message: " + e.getMessage(), e);
+			MailBridge.log( Level.ERROR, "MailDecryptor: subject decryption failed", e);
 			return null;
 		}
 	}

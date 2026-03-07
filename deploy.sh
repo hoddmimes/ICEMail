@@ -32,8 +32,8 @@ scp ICE-Server/log4j2.xml "$TARGET:$SERVER_DIR/"
 scp ICE-Server/create_user.sh ICE-Server/delete_user.sh "$TARGET:$SERVER_DIR/"
 scp -r ICE-Server/WebContent "$TARGET:$SERVER_DIR/"
 
-# Deploy bridge
-echo "Deploying bridge..."
+# Deploy bridge to remote
+echo "Deploying bridge to $TARGET..."
 scp ICE-Mailbridge/build/distributions/ice-mailbridge-1.0.jar "$TARGET:$BRIDGE_DIR/"
 #scp ICE-Mailbridge/cert.pem ICE-Mailbridge/key.pem "$TARGET:$BRIDGE_DIR/"
 scp ICE-Mailbridge/mailbridge-*.json "$TARGET:$BRIDGE_DIR/"

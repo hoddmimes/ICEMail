@@ -14,6 +14,9 @@ import java.util.List;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
 
+import java.security.SecureRandom;
+import java.security.Security;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -24,15 +27,17 @@ public class MailBridge
 
 	public static void main( String[] args)
 	{
+		// Warm up SecureRandom and BouncyCastle at startup to avoid a ~100 second block
+		// on first use caused by Linux /dev/random entropy starvation.
+		warmUpCrypto();
+
 		// Load configuration
 		String configFile = args.length > 0 ? args[0] : "mailbridge.json";
 		BridgeConfiguration config = BridgeConfiguration.load( configFile);
 		MailBridge.log( Level.INFO, "Configuration: " + config);
 
-		// Create the decryptor from configuration
-		Decryptor decryptor = config.createDecryptor();
-
-		// Create the login handler from configuration
+		// Create the login handler from configuration (singleton — it is stateless)
+		// Each ProxyChannel creates its own Decryptor instance per session.
 		LoginHandler loginHandler = config.createLoginHandler();
 
 		List<Thread> listenerThreads = new ArrayList<>();
@@ -40,7 +45,7 @@ public class MailBridge
 		// Start plain IMAP listener if enabled
 		if( config.isPlainEnabled())
 		{
-			Thread plainListener = new Thread( () -> runPlainListener( config, decryptor, loginHandler), "IMAP-Listener");
+			Thread plainListener = new Thread( () -> runPlainListener( config, loginHandler), "IMAP-Listener");
 			plainListener.start();
 			listenerThreads.add( plainListener);
 		}
@@ -48,7 +53,7 @@ public class MailBridge
 		// Start IMAPS listener if enabled
 		if( config.isImapsEnabled())
 		{
-			Thread imapsListener = new Thread( () -> runImapsListener( config, decryptor, loginHandler), "IMAPS-Listener");
+			Thread imapsListener = new Thread( () -> runImapsListener( config, loginHandler), "IMAPS-Listener");
 			imapsListener.start();
 			listenerThreads.add( imapsListener);
 		}
@@ -79,9 +84,28 @@ public class MailBridge
 	}
 
 	/**
+	 * Force early initialization of SecureRandom and BouncyCastle so the first
+	 * client login does not block waiting for OS entropy.
+	 */
+	private static void warmUpCrypto()
+	{
+		try {
+			if( Security.getProvider( BouncyCastleProvider.PROVIDER_NAME) == null)
+			{
+				Security.addProvider( new BouncyCastleProvider());
+			}
+			byte[] dummy = new byte[32];
+			new SecureRandom().nextBytes( dummy);
+			MailBridge.log( Level.INFO, "Crypto subsystem initialized (SecureRandom + BouncyCastle ready)");
+		} catch( Exception e) {
+			MailBridge.log( Level.WARN, "Crypto warmup failed: " + e.getMessage());
+		}
+	}
+
+	/**
 	 * Run the plain IMAP listener on the configured port.
 	 */
-	private static void runPlainListener( BridgeConfiguration config, Decryptor decryptor, LoginHandler loginHandler)
+	private static void runPlainListener( BridgeConfiguration config, LoginHandler loginHandler)
 	{
 		ServerSocket serverSocket = null;
 
@@ -95,7 +119,7 @@ public class MailBridge
 				clientSocket.setKeepAlive( true);
 				MailBridge.log( Level.INFO, "Received plain IMAP connection from " + clientSocket.getRemoteSocketAddress());
 
-				ProxyChannel proxyChannel = new ProxyChannel( clientSocket, config, decryptor, loginHandler);
+				ProxyChannel proxyChannel = new ProxyChannel( clientSocket, config, loginHandler);
 				new Thread( proxyChannel).start();
 			}
 		} catch( IOException e) {
@@ -115,7 +139,7 @@ public class MailBridge
 	/**
 	 * Run the IMAPS (TLS) listener on the configured port.
 	 */
-	private static void runImapsListener( BridgeConfiguration config, Decryptor decryptor, LoginHandler loginHandler)
+	private static void runImapsListener( BridgeConfiguration config, LoginHandler loginHandler)
 	{
 		SSLServerSocket serverSocket = null;
 
@@ -135,7 +159,7 @@ public class MailBridge
 				clientSocket.setKeepAlive( true);
 				MailBridge.log( Level.INFO, "Received IMAPS connection from " + clientSocket.getRemoteSocketAddress());
 
-				ProxyChannel proxyChannel = new ProxyChannel( clientSocket, config, decryptor, loginHandler);
+				ProxyChannel proxyChannel = new ProxyChannel( clientSocket, config, loginHandler);
 				new Thread( proxyChannel).start();
 			}
 		} catch( Exception e) {

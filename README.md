@@ -139,6 +139,43 @@ No Postfix source code is touched. The integration is entirely through Postfix's
 
 ---
 
+## Encryption in Practice
+
+ICEMail applies encryption at multiple layers, covering both transport security and message confidentiality.
+
+### Transport Encryption (SMTP between servers)
+
+When Postfix exchanges mail with other servers on the internet, TLS is used **opportunistically**. Postfix will attempt to establish a TLS-encrypted connection for both inbound and outbound SMTP, but will fall back to plaintext if the remote server does not support TLS. This is standard behaviour for internet mail and provides best-effort transport confidentiality without breaking compatibility with older or misconfigured servers.
+
+### End-to-End Encryption for Local Users
+
+All mail delivered to a user whose mailbox is hosted on the ICEMail server is encrypted **before** it is stored. The ICEMail after-queue filter intercepts every inbound message after Postfix accepts it, looks up the recipient's PGP public key, and encrypts the message body using AES-256 with the session key wrapped in the recipient's public key. Only the ciphertext is delivered to the IMAP store (Apache James). Neither the server nor anyone with access to the server's filesystem or database can read the message content.
+
+**All messages persisted in the ICEMail IMAP server are PGP-encrypted — without exception.** There is no plaintext mail at rest anywhere in the system.
+
+This encryption is applied regardless of where the mail originates — whether from another ICEMail user, an external sender, or a mailing list.
+
+### Mail to External Recipients
+
+Mail sent from ICEMail to recipients on **external mail servers** is delivered as ordinary internet mail and is **not end-to-end encrypted by default**. There is no general mechanism to obtain an external recipient's PGP key automatically, and external mail servers are not expected to accept PGP-encrypted payloads. Transport-level TLS is still applied where the receiving server supports it.
+
+### Encrypted Mail to External Recipients via Link
+
+For situations where sensitive content must be sent to an external recipient, the web mail compose page provides an optional password-based encryption feature. When used:
+
+1. The message body is encrypted in the browser using AES with a user-chosen password.
+2. The encrypted payload is stored temporarily on the ICEMail server.
+3. A plain-text mail is sent to the external recipient containing a link to a decryption page on the ICEMail web interface.
+4. The recipient opens the link, enters the agreed password, and the message is decrypted and displayed entirely in their browser.
+
+The ICEMail server never sees the password or the plaintext — decryption happens client-side in the recipient's browser. The shared password must be exchanged with the recipient through a separate, trusted channel (phone call, Signal, etc.).
+
+### General-Purpose AES Encryption Page
+
+The ICEMail web interface includes a standalone, publicly accessible page for encrypting and decrypting arbitrary text using AES. This page is available to anyone, with or without an ICEMail account, and can be used independently of the mail system — for example, to encrypt a text snippet before sharing it through any channel, or to decrypt content received from someone using the same page.
+
+---
+
 ## Further Reading
 
 A detailed architecture description including component internals, connection protocols, and step-by-step

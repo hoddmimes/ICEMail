@@ -69,21 +69,23 @@ public class ImapResponseHandler
 
 		MailBridge.log( Level.DEBUG, "FETCH response for message " + sequenceNumber);
 
-		// Check for various FETCH items that may contain encrypted content
-		if( containsEncryptedContent( fetchData))
-		{
-			return processFetchData( line);
-		}
-
-		// Check if there's a literal coming (body data)
+		// Check for a literal {size} FIRST — if present, we must buffer the body
+		// regardless of whether the header line also contains encrypted content.
 		Matcher literalMatcher = LITERAL_PATTERN.matcher( line);
 		if( literalMatcher.find())
 		{
 			literalBytesRemaining = Integer.parseInt( literalMatcher.group(1));
 			inFetchResponse = true;
 			fetchBuffer = new StringBuilder();
-			fetchBuffer.append( line);
-			MailBridge.log( Level.DEBUG, "FETCH has literal of " + literalBytesRemaining + " bytes");
+			fetchBuffer.append( line).append( "\r\n");
+			MailBridge.log( Level.DEBUG, "FETCH has literal of " + literalBytesRemaining + " bytes, buffering for decryption");
+			return null; // Hold this line until the full literal is received
+		}
+
+		// No literal — process any encrypted content in the FETCH line itself (e.g. ENVELOPE subject)
+		if( containsEncryptedContent( fetchData))
+		{
+			return processFetchData( line);
 		}
 
 		return line;
@@ -91,11 +93,13 @@ public class ImapResponseHandler
 
 	/**
 	 * Handle literal data (body content).
+	 * readLine() strips the line ending, so we re-add \r\n when buffering
+	 * and account for those 2 bytes in the remaining count.
 	 */
 	private String handleLiteralData( String line)
 	{
-		fetchBuffer.append( line);
-		literalBytesRemaining -= line.length();
+		fetchBuffer.append( line).append( "\r\n");
+		literalBytesRemaining -= (line.length() + 2);
 
 		if( literalBytesRemaining <= 0)
 		{

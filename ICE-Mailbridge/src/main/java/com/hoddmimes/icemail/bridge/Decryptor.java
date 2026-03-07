@@ -39,11 +39,13 @@ public interface Decryptor
 	boolean isReady();
 
 	/**
-	 * Configure the decryptor with credentials/keys.
-	 * Implementation-specific; may be a no-op for passthrough decryptors.
+	 * Initialize the decryptor for a user session.
+	 * Called at login time with the encrypted private key returned by the ICEMail server
+	 * and the user's plaintext password needed to unlock it.
 	 *
-	 * @param privateKey The private key (format depends on implementation)
-	 * @param passphrase Passphrase to unlock the private key
+	 * @param encryptedPrivateKey Base64-encoded PGP-symmetric-encrypted armored PGP private key
+	 * @param plaintextPassword   The user's plaintext password (used both to decrypt the key wrapper
+	 *                            and as the PGP key passphrase)
 	 */
-	void initialize( String privateKey, String passphrase);
+	void initialize( String encryptedPrivateKey, String plaintextPassword);
 }

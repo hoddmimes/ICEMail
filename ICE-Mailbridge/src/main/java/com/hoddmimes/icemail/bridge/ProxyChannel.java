@@ -64,27 +64,27 @@ public class ProxyChannel implements Runnable
 	private final LoginHandler loginHandler;
 
 	/**
-	 * Create a proxy channel with default configuration, passthrough decryptor and login handler.
+	 * Create a proxy channel with default configuration.
 	 */
 	public ProxyChannel( Socket plainSocket)
 	{
-		this( plainSocket, new BridgeConfiguration(), new PassthroughDecryptor(), new PassthroughLoginHandler());
+		this( plainSocket, new BridgeConfiguration(), new PassthroughLoginHandler());
 	}
 
 	/**
-	 * Create a proxy channel with configuration, decryptor and login handler.
+	 * Create a proxy channel with configuration and login handler.
+	 * A new Decryptor instance is created per session from the configuration.
 	 *
-	 * @param plainSocket The client socket
-	 * @param config The bridge configuration
-	 * @param decryptor The decryptor implementation to use
+	 * @param plainSocket  The client socket
+	 * @param config       The bridge configuration
 	 * @param loginHandler The login handler implementation to use
 	 */
-	public ProxyChannel( Socket plainSocket, BridgeConfiguration config, Decryptor decryptor, LoginHandler loginHandler)
+	public ProxyChannel( Socket plainSocket, BridgeConfiguration config, LoginHandler loginHandler)
 	{
 		this.plainSocket = plainSocket;
 		this.config = config;
-		this.decryptor = decryptor;
-		this.responseHandler = new ImapResponseHandler( decryptor);
+		this.decryptor = config.createDecryptor();
+		this.responseHandler = new ImapResponseHandler( this.decryptor);
 		this.loginHandler = loginHandler;
 
 		// Initialize SSL socket factory with configured protocol
@@ -112,6 +112,8 @@ public class ProxyChannel implements Runnable
 	 */
 	private String processClientCommand( String command)
 	{
+		MailBridge.log( Level.TRACE, "Raw client command: [" + command + "]");
+
 		// Check if we're waiting for the continuation line of a two-step AUTHENTICATE PLAIN
 		if( mPendingAuthTag != null)
 		{
@@ -184,11 +186,12 @@ public class ProxyChannel implements Runnable
 
 			String authzid = plainStr.substring( 0, first);
 			String username = plainStr.substring( first + 1, second);
-			String password = plainStr.substring( second + 1);
+			String plaintextPassword = plainStr.substring( second + 1);
 
+			MailBridge.log( Level.DEBUG, "AUTHENTICATE PLAIN decoded - authzid: [" + authzid + "] username: [" + username + "] password-length: " + plaintextPassword.length());
 			MailBridge.log( Level.DEBUG, "Intercepted AUTHENTICATE PLAIN for user: " + username);
 
-			LoginHandler.LoginResult result = loginHandler.executeLogin( username, password);
+			LoginHandler.LoginResult result = loginHandler.executeLogin( username, plaintextPassword);
 
 			if( result.isBlocked())
 			{
@@ -206,12 +209,26 @@ public class ProxyChannel implements Runnable
 				return null;
 			}
 
+			// Initialize the per-session decryptor with the encrypted private key and plaintext password
+			if( result.getEncryptedPrivateKey() != null)
+			{
+				MailBridge.log( Level.DEBUG, "Initializing decryptor for user: " + username);
+				decryptor.initialize( result.getEncryptedPrivateKey(), plaintextPassword);
+				MailBridge.log( Level.DEBUG, "Decryptor initialization complete for user: " + username);
+			}
+			else
+			{
+				MailBridge.log( Level.WARN, "No encrypted private key returned for user: " + username + ", decryption will be disabled");
+			}
+
 			String finalUsername = result.isModified() ? result.getUsername() : username;
-			String finalPassword = result.isModified() ? result.getPassword() : password;
+			String finalPassword = result.isModified() ? result.getPassword() : plaintextPassword;
 
 			// Re-encode as SASL PLAIN: authzid\0username\0password
 			String newPlain = authzid + "\0" + finalUsername + "\0" + finalPassword;
 			String newBase64 = Base64.getEncoder().encodeToString( newPlain.getBytes( StandardCharsets.UTF_8));
+
+			MailBridge.log( Level.DEBUG, "Forwarding modified AUTHENTICATE PLAIN credentials to IMAP server for user: " + finalUsername);
 
 			if( isSaslIR)
 			{
@@ -228,6 +245,7 @@ public class ProxyChannel implements Runnable
 
 	/**
 	 * Handle an IMAP LOGIN command by calling the login handler.
+	 * The plaintext password is captured before hashing so the decryptor can unlock the private key.
 	 *
 	 * @param originalCommand The original LOGIN command
 	 * @param matcher The regex matcher with captured groups
@@ -237,24 +255,35 @@ public class ProxyChannel implements Runnable
 	{
 		String tag = matcher.group(1);
 		String username = matcher.group(2);
-		String password = matcher.group(3);
+		String plaintextPassword = matcher.group(3);
 
-		MailBridge.log( Level.DEBUG, "Intercepted LOGIN command for user: " + username);
+		MailBridge.log( Level.DEBUG, "Intercepted LOGIN command - tag: [" + tag + "] username: [" + username + "] password-length: " + plaintextPassword.length());
 
-		// Call the login handler
-		LoginHandler.LoginResult result = loginHandler.executeLogin( username, password);
+		// Call the login handler (hashes password, fetches encrypted private key from server)
+		LoginHandler.LoginResult result = loginHandler.executeLogin( username, plaintextPassword);
 
 		if( result.isBlocked())
 		{
 			MailBridge.log( Level.WARN, "Login blocked for user " + username + ": " + result.getBlockReason());
-			// Send a NO response back to the client
 			try {
 				String noResponse = tag + " NO " + result.getBlockReason() + NEW_LINE;
 				plainOutputStream.write( noResponse.getBytes());
 			} catch( IOException e) {
 				MailBridge.log( Level.ERROR, "Failed to send blocked login response", e);
 			}
-			return null; // Don't forward to server
+			return null;
+		}
+
+		// Initialize the per-session decryptor with the encrypted private key and plaintext password
+		if( result.getEncryptedPrivateKey() != null)
+		{
+			MailBridge.log( Level.DEBUG, "Initializing decryptor for user: " + username);
+			decryptor.initialize( result.getEncryptedPrivateKey(), plaintextPassword);
+			MailBridge.log( Level.DEBUG, "Decryptor initialization complete for user: " + username);
+		}
+		else
+		{
+			MailBridge.log( Level.WARN, "No encrypted private key returned for user: " + username + ", decryption will be disabled");
 		}
 
 		if( result.isModified())
@@ -263,7 +292,6 @@ public class ProxyChannel implements Runnable
 			return result.toImapCommand( tag);
 		}
 
-		// Pass through unchanged
 		return originalCommand;
 	}
 	
@@ -272,9 +300,11 @@ public class ProxyChannel implements Runnable
 	{
 		String imapHost = config.getImapHost();
 		int imapPort = config.getImapPort();
+		String clientAddr = plainSocket.getInetAddress().getHostAddress() + ":" + plainSocket.getPort();
 
 		try {
-			MailBridge.log( Level.INFO, "Will try to establish a secure connection to " + imapHost + ":" + imapPort);
+			MailBridge.log( Level.INFO, "Client connected from " + clientAddr);
+			MailBridge.log( Level.INFO, "Connecting to IMAP server " + imapHost + ":" + imapPort);
 
 			// Establish a secure connection to the email server
 			sslSocket = (SSLSocket) sslSocketFactory.createSocket( imapHost, imapPort);
@@ -297,7 +327,7 @@ public class ProxyChannel implements Runnable
 			for( int i = 0; i < certificateChain.length; i++)
 				MailBridge.log( Level.DEBUG, ((X509Certificate) certificateChain[i]).getSubjectDN().toString());
 
-			MailBridge.log( Level.INFO, "Established a secure connection to " + imapHost + ":" + imapPort);
+			MailBridge.log( Level.INFO, "Successfully connected to IMAP server " + imapHost + ":" + imapPort + " (TLS: " + sslSession.getProtocol() + ")");
 			
 			// Create input and output streams between proxy and server
 			sslBufferedReader = new BufferedReader( new InputStreamReader( sslSocket.getInputStream()));

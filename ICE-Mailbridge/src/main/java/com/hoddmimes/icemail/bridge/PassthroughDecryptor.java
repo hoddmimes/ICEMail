@@ -39,7 +39,7 @@ public class PassthroughDecryptor implements Decryptor
 	}
 
 	@Override
-	public void initialize( String privateKey, String passphrase)
+	public void initialize( String encryptedPrivateKey, String plaintextPassword)
 	{
 		// No-op for passthrough implementation
 		MailBridge.log( Level.DEBUG, "PassthroughDecryptor.initialize called - ignoring");
