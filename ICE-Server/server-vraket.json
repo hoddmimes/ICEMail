@@ -9,7 +9,7 @@
   "mail_domain" : "koxnan.com",
   "imap_host" : "127.0.0.1",
   "imap_restapi_port" : 8000,
-  "imap_port" : 993,
+  "imap_port" : 1993,
   "imap_ssl" : true,
   "messages_batch_size" : 100,
   "ssl": {
@@ -28,7 +28,7 @@
     "internal_mail_user" : "mailer",
     "internal_mail_user_password" : "whatever",
     "smtp_host" : "localhost",
-    "smtp_port" : 587,
+    "smtp_port" : 1587,
     "starttls" : true
   },
   "dovecot_sasl" : {

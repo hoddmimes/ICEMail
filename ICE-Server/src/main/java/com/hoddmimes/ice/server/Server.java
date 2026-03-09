@@ -397,6 +397,7 @@ public class Server
 
                 LOGGER.info("User \"{}\" logged in successfully", username);
                 JsonObject jLoginResponse = new JsonObject();
+                jLoginResponse.addProperty("success", true);
                 jLoginResponse.addProperty("status", 200);
                 jLoginResponse.addProperty("message", "Login successful");
                 if (jUser.has(Profile.PRIVATE_KEY) && !jUser.get(Profile.PRIVATE_KEY).isJsonNull()) {

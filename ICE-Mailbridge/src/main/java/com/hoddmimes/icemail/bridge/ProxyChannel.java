@@ -32,9 +32,13 @@ public class ProxyChannel implements Runnable
 {
 	private static final String NEW_LINE = "\r\n";
 
+	// IMAP astring token: quoted string OR atom (non-whitespace, non-special chars).
+	// Captures the whole token including surrounding quotes (stripped later by unquoteImapArg).
+	private static final String IMAP_ASTRING = "(?:\"(?:[^\"\\\\]|\\\\.)*\"|\\S+)";
+
 	// Pattern to match IMAP LOGIN command: <tag> LOGIN <username> <password>
 	private static final Pattern LOGIN_PATTERN = Pattern.compile(
-		"^(\\S+)\\s+LOGIN\\s+(\\S+)\\s+(\\S+)\\s*$", Pattern.CASE_INSENSITIVE);
+		"^(\\S+)\\s+LOGIN\\s+(" + IMAP_ASTRING + ")\\s+(" + IMAP_ASTRING + ")\\s*$", Pattern.CASE_INSENSITIVE);
 
 	// Pattern to match IMAP AUTHENTICATE PLAIN with optional initial response (SASL-IR)
 	private static final Pattern AUTH_PLAIN_PATTERN = Pattern.compile(
@@ -244,6 +248,21 @@ public class ProxyChannel implements Runnable
 	}
 
 	/**
+	 * Strip IMAP quoted-string syntax from a LOGIN argument.
+	 * IMAP LOGIN allows: atom, "quoted string", or {N} literal.
+	 * The regex captures the whole token including quotes, so strip them here.
+	 */
+	private String unquoteImapArg( String arg)
+	{
+		if( arg != null && arg.length() >= 2 && arg.charAt(0) == '"' && arg.charAt(arg.length() - 1) == '"')
+		{
+			// Remove surrounding quotes and unescape \" and \\ per RFC 3501
+			return arg.substring(1, arg.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\");
+		}
+		return arg;
+	}
+
+	/**
 	 * Handle an IMAP LOGIN command by calling the login handler.
 	 * The plaintext password is captured before hashing so the decryptor can unlock the private key.
 	 *
@@ -254,8 +273,8 @@ public class ProxyChannel implements Runnable
 	private String handleLoginCommand( String originalCommand, Matcher matcher)
 	{
 		String tag = matcher.group(1);
-		String username = matcher.group(2);
-		String plaintextPassword = matcher.group(3);
+		String username = unquoteImapArg( matcher.group(2));
+		String plaintextPassword = unquoteImapArg( matcher.group(3));
 
 		MailBridge.log( Level.DEBUG, "Intercepted LOGIN command - tag: [" + tag + "] username: [" + username + "] password-length: " + plaintextPassword.length());
 
@@ -304,10 +323,35 @@ public class ProxyChannel implements Runnable
 
 		try {
 			MailBridge.log( Level.INFO, "Client connected from " + clientAddr);
-			MailBridge.log( Level.INFO, "Connecting to IMAP server " + imapHost + ":" + imapPort);
 
-			// Establish a secure connection to the email server
-			sslSocket = (SSLSocket) sslSocketFactory.createSocket( imapHost, imapPort);
+			// Connect to the IMAP server with retry, to handle the case where the bridge
+			// starts before the IMAP server has finished initializing.
+			final int MAX_RETRIES = 10;
+			final int RETRY_DELAY_MS = 2000;
+			java.net.ConnectException lastConnectException = null;
+
+			for( int attempt = 1; attempt <= MAX_RETRIES; attempt++)
+			{
+				try {
+					MailBridge.log( Level.INFO, "Connecting to IMAP server " + imapHost + ":" + imapPort + " (attempt " + attempt + "/" + MAX_RETRIES + ")");
+					sslSocket = (SSLSocket) sslSocketFactory.createSocket( imapHost, imapPort);
+					lastConnectException = null;
+					break; // connected
+				} catch( java.net.ConnectException e) {
+					lastConnectException = e;
+					MailBridge.log( Level.WARN, "IMAP server not ready (attempt " + attempt + "/" + MAX_RETRIES + "): " + e.getMessage());
+					if( attempt < MAX_RETRIES)
+					{
+						try { Thread.sleep( RETRY_DELAY_MS); } catch( InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+					}
+				}
+			}
+
+			if( lastConnectException != null)
+			{
+				MailBridge.log( Level.ERROR, "Could not connect to IMAP server after " + MAX_RETRIES + " attempts, giving up");
+				throw lastConnectException;
+			}
 
 			// Disable hostname verification to accept any certificate
 			javax.net.ssl.SSLParameters sslParams = sslSocket.getSSLParameters();
@@ -333,12 +377,23 @@ public class ProxyChannel implements Runnable
 			sslBufferedReader = new BufferedReader( new InputStreamReader( sslSocket.getInputStream()));
 			sslOutputStream = sslSocket.getOutputStream();
 
+			// If the client socket is TLS (IMAPS listener), complete the handshake explicitly
+			// before starting the proxy threads. Without this, Thread-1's write() and Thread-2's
+			// read() race to initiate the handshake simultaneously, which causes connection resets
+			// on real networks with non-zero latency (e.g., iOS Mail clients).
+			if( plainSocket instanceof SSLSocket)
+			{
+				SSLSocket clientSslSocket = (SSLSocket) plainSocket;
+				clientSslSocket.startHandshake();
+				MailBridge.log( Level.INFO, "TLS handshake with client completed (" + clientSslSocket.getSession().getProtocol() + ")");
+			}
+
 			MailBridge.log( Level.INFO, "Starting to listen");
 
 			// Create input and output streams between proxy and client
 			plainBufferedReader = new BufferedReader( new InputStreamReader( plainSocket.getInputStream()));
 			plainOutputStream = plainSocket.getOutputStream();
-			
+
 			Thread[] threads = new Thread[2];
 			
 			// Create a thread for listening to messages from server and forwarding them to client
@@ -357,8 +412,12 @@ public class ProxyChannel implements Runnable
 								// If handler returns null, it's buffering a multi-line response
 								if( processedLine != null)
 								{
-									// readLine loses line separator, re-add it.
-									processedLine = processedLine + NEW_LINE;
+									// readLine() strips the line terminator. Re-add CRLF unless
+									// the response is a buffered multi-line block already ending
+									// with \r\n (adding a second \r\n inserts a spurious blank line
+									// between the IMAP literal and its closing ")", breaking iOS Mail).
+									if( !processedLine.endsWith( NEW_LINE))
+										processedLine = processedLine + NEW_LINE;
 									plainOutputStream.write( processedLine.getBytes());
 									MailBridge.log( Level.TRACE, "From server to client: " + processedLine);
 								}

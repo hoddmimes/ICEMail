@@ -5,6 +5,7 @@
 
 package com.hoddmimes.icemail.bridge;
 
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -165,7 +166,40 @@ public class ImapResponseHandler
 		// Decrypt body content
 		result = decryptBody( result);
 
+		// Update the IMAP literal {N} byte count to match the (possibly changed) content size.
+		// Strict clients like iOS Mail read exactly N bytes; a stale count corrupts the stream.
+		result = updateLiteralSizeInResponse( result);
+
 		return result;
+	}
+
+	/**
+	 * Recalculate and update the {N} literal byte count after decryption.
+	 * The literal content is everything after the first CRLF (the header line).
+	 */
+	private String updateLiteralSizeInResponse( String response)
+	{
+		int firstCrlf = response.indexOf( "\r\n");
+		if( firstCrlf < 0)
+			return response;
+
+		String headerLine = response.substring( 0, firstCrlf);
+		Matcher literalMatcher = LITERAL_PATTERN.matcher( headerLine);
+		if( !literalMatcher.find())
+			return response;
+
+		String literalContent = response.substring( firstCrlf + 2);
+		int oldSize = Integer.parseInt( literalMatcher.group(1));
+		int newSize = literalContent.getBytes( StandardCharsets.UTF_8).length;
+
+		if( oldSize != newSize)
+		{
+			MailBridge.log( Level.DEBUG, "Updated FETCH literal size after decryption: {" + oldSize + "} -> {" + newSize + "}");
+			String newHeader = literalMatcher.replaceFirst( "{" + newSize + "}");
+			return newHeader + "\r\n" + literalContent;
+		}
+
+		return response;
 	}
 
 	/**
