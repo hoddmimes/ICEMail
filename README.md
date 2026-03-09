@@ -170,6 +170,39 @@ For situations where sensitive content must be sent to an external recipient, th
 
 The ICEMail server never sees the password or the plaintext — decryption happens client-side in the recipient's browser. The shared password must be exchanged with the recipient through a separate, trusted channel (phone call, Signal, etc.).
 
+### Encrypted Mail via Standard Mail Clients (Mailbridge)
+
+Users who prefer to use a standard mail client (Apple Mail, Thunderbird, or any IMAP/SMTP client) instead of the web interface can still send password-encrypted mail to external or internal recipients, via the ICEMail mailbridge.
+
+To trigger encryption, prefix the subject line with `encrypt:<password>:` followed by the intended subject:
+
+```
+encrypt:MyPassword:Hello, this is the real subject
+```
+
+The mailbridge intercepts the outgoing message during SMTP submission and:
+
+1. Extracts the password and the real subject from the subject line.
+2. Decodes the message body (handling multipart, quoted-printable, and base64 as needed).
+3. Encrypts the body using AES-256-GCM with PBKDF2 key derivation — the same algorithm used by the web compose page.
+4. Stores the encrypted payload on the ICEMail server and replaces the outgoing mail with a notification containing a link to the decryption page.
+5. Rewrites the subject to remove the `encrypt:<password>:` prefix before the mail leaves the server, so recipients only see the intended subject.
+
+Replies are also supported — the `Re:` prefix is preserved correctly:
+
+```
+Re: encrypt:MyPassword:Original Subject
+```
+
+becomes a reply with subject `Re: Original Subject`.
+
+**Rules for the password:**
+- Must be at least 8 characters.
+- Must not contain the `:` character (it is used as the delimiter).
+- Must be shared with the recipient through a separate trusted channel (phone, Signal, etc.) — the server never sees the password.
+
+The decryption happens entirely client-side in the recipient's browser, on the same page used by the web compose feature. From the recipient's perspective there is no difference between a mail encrypted via the web interface and one encrypted via a standard mail client.
+
 ### General-Purpose AES Encryption Page
 
 The ICEMail web interface includes a standalone, publicly accessible page for encrypting and decrypting arbitrary text using AES. This page is available to anyone, with or without an ICEMail account, and can be used independently of the mail system — for example, to encrypt a text snippet before sharing it through any channel, or to decrypt content received from someone using the same page.

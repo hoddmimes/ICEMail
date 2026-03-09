@@ -46,6 +46,9 @@ public class SmtpProxyChannel implements Runnable
 	// SSLSocketFactory for connecting to the upstream SMTP server (trust-all)
 	private SSLSocketFactory serverSslFactory;
 
+	// Buffer for assembling BDAT chunks before processing (encryption needs the full mail)
+	private StringBuilder bdatBuffer = null;
+
 	public SmtpProxyChannel( Socket clientSocket, BridgeConfiguration config, LoginHandler loginHandler)
 	{
 		this.clientSocket = clientSocket;
@@ -71,11 +74,11 @@ public class SmtpProxyChannel implements Runnable
 		try {
 			// Connect to upstream SMTP server (plain TCP initially)
 			serverSocket = new Socket( config.getSmtpHost(), config.getSmtpPort());
-			serverReader = new BufferedReader( new InputStreamReader( serverSocket.getInputStream()));
+			serverReader = new BufferedReader( new InputStreamReader( serverSocket.getInputStream(), StandardCharsets.ISO_8859_1));
 			serverOut = serverSocket.getOutputStream();
 
 			// Set up client-side streams
-			clientReader = new BufferedReader( new InputStreamReader( clientSocket.getInputStream()));
+			clientReader = new BufferedReader( new InputStreamReader( clientSocket.getInputStream(), StandardCharsets.ISO_8859_1));
 			clientOut = clientSocket.getOutputStream();
 
 			MailBridge.log( Level.INFO, "SMTP proxy connected to " + config.getSmtpHost() + ":" + config.getSmtpPort());
@@ -116,6 +119,10 @@ public class SmtpProxyChannel implements Runnable
 				else if( upperCmd.equals( "DATA"))
 				{
 					handleData();
+				}
+				else if( upperCmd.startsWith( "BDAT"))
+				{
+					handleBdat( cmd);
 				}
 				else if( upperCmd.equals( "QUIT"))
 				{
@@ -283,33 +290,117 @@ public class SmtpProxyChannel implements Runnable
 	}
 
 	/**
-	 * Handle DATA phase - relay lines until lone "." terminator.
+	 * Handle BDAT chunk (RFC 3030 CHUNKING extension).
+	 * All chunks are buffered locally. When LAST is received the full mail is
+	 * passed through the encryptor and then forwarded to the server as a DATA
+	 * transaction (postfix always supports DATA on the submission port).
+	 * Intermediate chunks get a synthetic 250 so the client can pipeline freely.
+	 */
+	private void handleBdat( String cmd) throws IOException
+	{
+		String[] parts = cmd.split( "\\s+");
+		if( parts.length < 2)
+		{
+			sendToClient( "501 5.5.4 Syntax error in BDAT command");
+			return;
+		}
+
+		int chunkSize;
+		try {
+			chunkSize = Integer.parseInt( parts[1]);
+		} catch( NumberFormatException e) {
+			sendToClient( "501 5.5.4 Syntax error in BDAT command");
+			return;
+		}
+		boolean isLast = parts.length >= 3 && parts[2].equalsIgnoreCase( "LAST");
+
+		MailBridge.log( Level.DEBUG, "SMTP BDAT chunk size=" + chunkSize + (isLast ? " LAST" : ""));
+
+		// Read exactly chunkSize chars from the client into the buffer
+		if( bdatBuffer == null) bdatBuffer = new StringBuilder();
+		char[] buf = new char[Math.min( chunkSize, 65536)];
+		int remaining = chunkSize;
+		while( remaining > 0)
+		{
+			int n = clientReader.read( buf, 0, Math.min( remaining, buf.length));
+			if( n < 0) break;
+			bdatBuffer.append( buf, 0, n);
+			remaining -= n;
+		}
+
+		if( !isLast)
+		{
+			// Acknowledge the chunk without touching the server yet
+			sendToClient( "250 2.0.0 Chunk accepted");
+			return;
+		}
+
+		// All chunks received — optionally encrypt, then deliver via DATA
+		String rawMail = bdatBuffer.toString();
+		bdatBuffer = null;
+
+		String processed = SmtpMailEncryptor.process( rawMail);
+		if( processed != null) rawMail = processed;
+
+		sendToServer( "DATA");
+		String resp = readSmtpResponse();
+		if( !resp.startsWith( "354"))
+		{
+			sendToClient( "500 5.0.0 Upstream server rejected DATA");
+			return;
+		}
+
+		sendMailToServer( rawMail);
+		resp = readSmtpResponse();
+		sendToClient( resp);
+	}
+
+	/**
+	 * Handle DATA phase — buffer the full mail, optionally encrypt, then relay.
 	 */
 	private void handleData() throws IOException
 	{
 		sendToServer( "DATA");
 		String resp = readSmtpResponse();
 		sendToClient( resp);
+		if( !resp.startsWith( "354")) return;
 
-		if( !resp.startsWith( "354"))
-		{
-			return;
-		}
-
-		// Relay message body from client to server until lone "."
+		// Collect the entire mail from the client (undo SMTP dot-stuffing)
+		StringBuilder mailBuffer = new StringBuilder();
 		String line;
 		while(( line = clientReader.readLine()) != null)
 		{
-			sendToServer( line);
-			if( line.equals( "."))
-			{
-				break;
-			}
+			if( line.equals( ".")) break;
+			if( line.startsWith( ".")) line = line.substring( 1); // un-stuff
+			mailBuffer.append( line).append( "\r\n");
 		}
 
-		// Read final response (250 OK) from server
+		String rawMail = mailBuffer.toString();
+		String processed = SmtpMailEncryptor.process( rawMail);
+		if( processed != null) rawMail = processed;
+
+		sendMailToServer( rawMail);
 		resp = readSmtpResponse();
 		sendToClient( resp);
+	}
+
+	/**
+	 * Send a complete raw mail string to the upstream server as SMTP DATA content.
+	 * Applies dot-stuffing and terminates with the lone "." marker.
+	 */
+	private void sendMailToServer( String rawMail) throws IOException
+	{
+		String[] lines = rawMail.split( "\r\n", -1);
+		for( int i = 0; i < lines.length; i++)
+		{
+			String l = lines[i];
+			// Skip the empty string produced by the trailing \r\n at end of rawMail
+			if( l.isEmpty() && i == lines.length - 1) break;
+			String toSend = l.startsWith( ".") ? "." + l : l;
+			serverOut.write( (toSend + "\r\n").getBytes( StandardCharsets.UTF_8));
+		}
+		serverOut.write( ".\r\n".getBytes( StandardCharsets.UTF_8));
+		serverOut.flush();
 	}
 
 	/**
@@ -419,7 +510,7 @@ public class SmtpProxyChannel implements Runnable
 		sslSocket.startHandshake();
 
 		serverSocket = sslSocket;
-		serverReader = new BufferedReader( new InputStreamReader( sslSocket.getInputStream()));
+		serverReader = new BufferedReader( new InputStreamReader( sslSocket.getInputStream(), StandardCharsets.ISO_8859_1));
 		serverOut = sslSocket.getOutputStream();
 
 		MailBridge.log( Level.DEBUG, "SMTP server connection upgraded to TLS");
@@ -439,7 +530,7 @@ public class SmtpProxyChannel implements Runnable
 			sslSocket.setUseClientMode( false);
 			sslSocket.startHandshake();
 
-			clientReader = new BufferedReader( new InputStreamReader( sslSocket.getInputStream()));
+			clientReader = new BufferedReader( new InputStreamReader( sslSocket.getInputStream(), StandardCharsets.ISO_8859_1));
 			clientOut = sslSocket.getOutputStream();
 
 			MailBridge.log( Level.DEBUG, "SMTP client connection upgraded to TLS");
