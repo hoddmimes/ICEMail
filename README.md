@@ -227,17 +227,26 @@ of complexity. However, here is a crash instruction on 10000 feet what to think 
 - Then you need to get your self a registered public domain. You should take a look at how to use and setup DKIM, 
   DMARC and SPF that is a configuration task in DNS and postfix. Well it is possible to get everything running on a private 
    network without all mail protection setup in DNS. That what I used when developing the solution.
-- I have a script deploy.sh that copy all required files over to the target machine. To be used after a successfull build.
 - Also, there is a separate project required for providing the IMAP server functionality. The project is
   [IMAP-apache-james]( https://github.com/hoddmimes/IMAP-Apache-James) the project is forked from 
   [Apache James project](https://github.com/apache/james-project) and being stripped down to just include the need IMAP 
   functionality.
-- That project IMAP-apache-james also contain a deploy.sh and deploy-all.sh for identifying and deploying required artefacts.
-  The IMAP server is essential and required.
+- That project IMAP-apache-james is essential and required.
+
+I have compiled [makeself](https://gcore.com/learning/how-to-make-file-executable-in-linux) run files for the 
+components. They will install and setup what you need for getting a jump start. 
+
+- ice-server ice-server-installer-1.0.run
+- ice-bridge ice-bridge-installer-1.0.run
+- ice-imap   ice-imap-installer-1.0.run
+
+_the run file for ice-imap is in the [IMAP-apache-james]( https://github.com/hoddmimes/IMAP-Apache-James) project_
+
+
 - In the extra directory I have placed a few files that might help you to get going
     - postfix configuration files 
-    - run files for the ICEMail server, bridge and IMAP (james) server.
-    - If you would like to run the servers as server there are examples how on the service defintion files.
+
+
 
 I have a very first version of the solution up and running for testing on koxnan.com. 
 You might be able to try it out on https://www.koxnan.com/index.html
