@@ -71,6 +71,7 @@ public class Server
     String      mImapHost = "localhost";
     int         mImapPort = 993;
     boolean     mImapSsl = true;
+    int         mImapRestapiPort = 8000;
     int         mMessagesBatchSize = 25;
 
     // SMTP submission configuration
@@ -166,6 +167,9 @@ public class Server
             }
             if (jConfig.has("imap_ssl")) {
                 mImapSsl = jConfig.get("imap_ssl").getAsBoolean();
+            }
+            if (jConfig.has("imap_restapi_port")) {
+                mImapRestapiPort = jConfig.get("imap_restapi_port").getAsInt();
             }
             if (jConfig.has("messages_batch_size")) {
                 mMessagesBatchSize = jConfig.get("messages_batch_size").getAsInt();
@@ -494,6 +498,7 @@ public class Server
         });
         mApp.post("/register", ctx -> mAdminHandler.createUser(ctx));
         mApp.post("/login", Server::loginS);
+        mApp.post("/change_password", ctx -> sInstance.changePassword(ctx));
         mApp.post("/confirm", ctx -> sInstance.confirmAccount(ctx));
         mApp.get("/decrypt-message", ctx -> sInstance.getDecryptMessage(ctx));
 
@@ -644,6 +649,53 @@ public class Server
     }
 
 
+
+    private void updateImapPassword(String username, String hashedPassword) {
+        try {
+            String adminPassword = jConfig.get("admin").getAsJsonObject().get("password").getAsString();
+            String credentials = java.util.Base64.getEncoder()
+                    .encodeToString(("admin:" + adminPassword).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String url = "http://" + mImapHost + ":" + mImapRestapiPort + "/users/" + username;
+            String body = "{\"password\":\"" + hashedPassword + "\"}";
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Basic " + credentials)
+                    .PUT(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            java.net.http.HttpResponse<String> response = client.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            LOGGER.info("IMAP password update for user \"{}\": HTTP {}", username, response.statusCode());
+        } catch (Exception e) {
+            LOGGER.warn("Failed to update IMAP password for user \"{}\": {}", username, e.getMessage());
+        }
+    }
+
+    private void changePassword(Context ctx) {
+        var httpSession = ctx.req().getSession(false);
+        JsonObject sessionUser = httpSession != null
+                ? (JsonObject) httpSession.getAttribute("username") : null;
+        if (sessionUser == null) {
+            ctx.status(401).result(JAux.statusResponse(401, "Not authenticated"));
+            return;
+        }
+        String username = sessionUser.get(Profile.USERNAME).getAsString();
+        try {
+            JsonObject jBody = JsonParser.parseString(ctx.body()).getAsJsonObject();
+            String newPassword   = jBody.get("newPassword").getAsString();
+            String newPrivateKey = jBody.get("newPrivateKey").getAsString();
+            db.updatePassword(username, newPassword, newPrivateKey);
+            sessionUser.addProperty(Profile.PASSWORD,    newPassword);
+            sessionUser.addProperty(Profile.PRIVATE_KEY, newPrivateKey);
+            updateImapPassword(username, newPassword);
+            LOGGER.info("Password changed for user: {}", username);
+            ctx.status(200).result(JAux.statusResponse(200, "Password changed successfully"));
+        } catch (Exception e) {
+            LOGGER.warn("Failed to change password for user \"{}\": {}", username, e.getMessage());
+            ctx.status(500).result(JAux.statusResponse(500, "Failed to change password: " + e.getMessage()));
+        }
+    }
 
     private void confirmAccount(Context ctx) {
         String body = ctx.body();

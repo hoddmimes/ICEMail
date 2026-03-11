@@ -56,6 +56,7 @@ function login_init() {
                 stsmsg.className = "success";
                 // Store password in sessionStorage for client-side PGP decryption
                 sessionStorage.setItem('password', password);
+                sessionStorage.setItem('username', username.toLowerCase());
                 if (username.toLowerCase() == 'admin') {
                     // User is successfully logged in. If the user is "admin" navigate to the admin-index.html page
                     loadPage('/admin/index.html');

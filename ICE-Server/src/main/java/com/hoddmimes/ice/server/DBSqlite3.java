@@ -449,6 +449,20 @@ public class DBSqlite3 implements DBBase
         }
     }
 
+    public void updatePassword(String username, String newHashedPassword, String newPrivateKey) throws DBException {
+        String sql = "UPDATE " + DB_TABLE_PROFILE + " SET " +
+                Profile.PASSWORD + " = ?, " +
+                Profile.PRIVATE_KEY + " = ? WHERE " + Profile.USERNAME + " = ?";
+        try (PreparedStatement stmt = mConnection.prepareStatement(sql)) {
+            stmt.setString(1, newHashedPassword);
+            stmt.setString(2, newPrivateKey);
+            stmt.setString(3, username);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new DBException("Failed to update password", e);
+        }
+    }
+
     public void confirmUserByUsername(String username) throws DBException {
         String sql = "UPDATE " + DB_TABLE_PROFILE + " SET " + Profile.CONFIRMED + " = 1, " +
                 Profile.CONF_UID + " = NULL WHERE " + Profile.USERNAME + " = ?";
