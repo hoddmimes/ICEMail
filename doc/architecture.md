@@ -52,26 +52,24 @@ The system consists of four main components:
  │  │  IMAP proxy + SMTP proxy        │ │                                  │
  │  └────────┬──────────┬─────────────┘ │                                  │
  └───────────┼──────────┼───────────────┼──────────────────────────────────┘
-             │ IMAPS    │ SMTP          │ HTTPS
+             │ IMAPS    │ SMTP:587      │ HTTPS
+             │ :993     │               │
  ┌───────────┼──────────┼───────────────┼──────────────────────────────────┐
- │  Server                              │                                  │
- │           │          │               │                                  │
- │  ┌────────▼────────────────┐  ┌──────▼────────────────────────────────┐ │
- │  │  James (IMAP server)    │  │  ICEMail Server                       │ │
- │  │                         │  │  REST API  :8282 (HTTPS)              │ │
- │  │  IMAPS      :993  ◄─────┼──┤  Web App   :8282 (HTTPS)  (IMAPS)    │ │
- │  │  LMTP        :24  ◄──┐  │  │  After-queue filter :10026/:10027    │ │
- │  │  WebAdmin  :8000  ◄──┼──┤  │  SASL server        :12345           │ │
- │  │                       │  │  │  SQLite3 user DB                     │ │
- │  │  userSync  :8282 ─────┼──┼──►  /api/users  (HTTPS)                │ │
- │  └─────────────────────────┘  └───────────────────────────────────────┘ │
- │                         ▲                                               │
- │  ┌────────────────┐      │                                              │
- │  │  Postfix       │      │ SMTP :10026/:10027  after-queue filter       │
- │  │  MTA           ├──────┘                                              │
- │  │  SMTP :25/:587 │                                                     │
- │  │  LMTP ─────────┼──────────────────────────────► James :24           │
- │  └────────────────┘                                                     │
+ │  Server   │          │               │                                  │
+ │           │          ▼               │                                  │
+ │  ┌────────▼──────┐  ┌─────────────┐  ┌──────▼────────────────────────┐  │
+ │  │  James        │  │  Postfix    │  │  ICEMail Server               │  │
+ │  │  (IMAP store) │  │  MTA        │  │  REST API  :443 (HTTPS)       │  │
+ │  │               │  │  :25/:587   │  │  Web App   :443 (HTTPS)       │  │
+ │  │  IMAPS  :993 ◄┼──┤             │  │  After-queue :10026/:10027    │  │
+ │  │  LMTP    :24 ◄┼──┤◄────────────┼──┤  SASL server :12345          │  │
+ │  │  WebAdmin:8000◄┼──┤  LMTP :24  │  │  SQLite3 user DB              │  │
+ │  │               │  │             │  │                               │  │
+ │  │  userSync ────┼──┼─────────────┼──►  /api/users  (HTTPS)         │  │
+ │  └───────────────┘  │             │  └───────────────────────────────┘  │
+ │                     │◄────────────┤  after-queue filter :10026/:10027   │
+ │                     │  SMTP:10027 │  (re-inject encrypted mail)         │
+ │                     └─────────────┘                                     │
  └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -83,7 +81,7 @@ The central server component. It acts as the REST API hub, web application serve
 
 **Source:** `ICEMail/ICE-Server`
 **Technology:** Java 21, Javalin (Jetty), SQLite3, BouncyCastle PGP, Log4j2
-**Default port:** 8282 (HTTPS, TLS via PEM cert/key)
+**Default port:** 443 (HTTPS, TLS via PEM cert/key)
 
 ### 1.1 User Profile Database
 
@@ -98,29 +96,63 @@ The ICEMail Server exposes a REST API over HTTPS used by all other components:
 | `/register` | POST | Public account self-registration |
 | `/login` | POST | Authenticate and establish a session |
 | `/confirm` | POST | Confirm account via email link |
+| `/change_password` | POST | Change password and re-encrypt private key (authenticated session) |
+| `/decrypt-message` | GET | Retrieve an ICE-encrypted message for external recipient decryption |
+| `/altcha/challenge` | GET | Generate an ALTCHA proof-of-work challenge for bot protection |
 | `/api/users` | GET | Returns all user credentials (username + hashed password) — used by James for user sync |
-| `/api/admin` | GET | Returns admin credentials |
+| `/api/admin` | GET | Returns admin credentials — used by James for webadmin auth sync |
 | `/admin/users` | POST | List users (admin session required) |
-| `/admin/handleUser` | POST | Block or delete a user |
-| `/admin/createUser` | POST | Admin-create a confirmed user |
-| `/admin/imap/*` | GET | Proxy to James WebAdmin REST API |
-| `/web/*` | GET/POST | Web mail API (authenticated session) |
+| `/admin/handleUser` | POST | Block, delete or confirm a user (admin session required) |
+| `/admin/createUser` | POST | Admin-create a pre-confirmed user |
+| `/admin/imap/users` | GET | Proxy — James WebAdmin user list |
+| `/admin/imap/domains` | GET | Proxy — James WebAdmin domain list |
+| `/admin/imap/mailboxes` | GET | Proxy — James WebAdmin mailbox list |
+| `/admin/imap/mailQueues` | GET | Proxy — James WebAdmin mail queues |
+| `/admin/imap/mailRepositories` | GET | Proxy — James WebAdmin mail repositories |
+| `/admin/imap/deadLetters` | GET | Proxy — James WebAdmin dead-letter queue |
+| `/web/mailboxes` | GET | List IMAP mailboxes/folders (authenticated session) |
+| `/web/messages` | GET | List messages in a mailbox (authenticated session) |
+| `/web/message` | GET | Fetch a single message body (authenticated session) |
+| `/web/attachment` | GET | Download a message attachment (authenticated session) |
+| `/web/message/delete` | POST | Delete a message (authenticated session) |
+| `/web/compose/send` | POST | Send a composed message via SMTP (authenticated session) |
+| `/web/profile` | GET | Returns the user's encrypted private key for client-side decryption |
+| `/web/contacts` | GET | List the user's contacts (authenticated session) |
+| `/web/contacts/create` | POST | Add a contact (authenticated session) |
+| `/web/contacts/update` | POST | Update a contact (authenticated session) |
+| `/web/contacts/delete` | POST | Delete a contact (authenticated session) |
 
 ### 1.3 Web Interface
 
-A single-page web application served as static files (`WebContent/`) from Javalin. Pages include:
+A web application served as static files (`WebContent/`) from Javalin. Pages include:
 
+**Public pages (no session required):**
 - **`login.html`** — User login
 - **`create_account.html`** — Self-registration (if enabled)
 - **`confirm.html`** — Account email confirmation
-- **`web/index.html`** — Main web mail interface (mailboxes, message list, compose)
-- **`web/message.html`** — Individual message view with client-side PGP decryption
 - **`decrypt.html`** — Decrypt an ICE-encrypted message sent to an external recipient
-- **`admin/index.html`** — Admin panel
-- **`admin/users.html`** — User management
-- **`admin/imap-*.html`** — IMAP server administration panels (proxied to James WebAdmin)
+- **`aes-tool.html`** — Standalone AES-256 encryption/decryption utility
 
-JavaScript libraries used client-side: `openpgp.js` (PGP operations), `crypto-js` (symmetric crypto), `argon2-bundled` (key derivation).
+**Web mail (authenticated session required):**
+- **`web/index.html`** — Main web mail interface (navigation, compose button, contacts)
+- **`web/mailboxes.html`** — Mailbox/folder list
+- **`web/messages.html`** — Message list for a selected mailbox
+- **`web/message.html`** — Individual message view with client-side PGP decryption
+- **`change_password.html`** — Change password with client-side PGP private key re-encryption
+
+**Admin panel (admin session required):**
+- **`admin/index.html`** — Admin dashboard
+- **`admin/users.html`** — User listing, block/delete/confirm/create actions
+- **`admin/create_user.html`** — Admin create user form
+- **`admin/statistics.html`** — Server statistics
+- **`admin/imap-users.html`** — James user list (proxied)
+- **`admin/imap-domains.html`** — James domain list (proxied)
+- **`admin/imap-mailboxes.html`** — James mailbox list (proxied)
+- **`admin/imap-mailqueues.html`** — James mail queues (proxied)
+- **`admin/imap-mailrepositories.html`** — James mail repositories (proxied)
+- **`admin/imap-deadletters.html`** — James dead-letter queue (proxied)
+
+JavaScript libraries used client-side: `openpgp.js` (PGP operations), `crypto-js` (symmetric crypto), `argon2-bundled` (PBKDF2 key derivation).
 
 ### 1.4 Postfix After-Queue Filter
 
@@ -145,14 +177,6 @@ When a user submits mail via SMTP (port 587), Postfix asks the SASL server wheth
 This allows Postfix to authenticate ICEMail users for SMTP submission without needing its own user database or PAM.
 
 An `internal_mailer` service account (used by the ICEMail Server itself for sending confirmation emails) can also be registered with the SASL server so it can authenticate against the local Postfix SMTP relay.
-
-### 1.6 Admin Web Interface
-
-Accessible at `/admin/` (requires admin session). Provides:
-
-- User listing with filter
-- Create / block / delete users
-- Proxy views into James WebAdmin: domains, mailboxes, mail queues, mail repositories, dead-letter queues
 
 ---
 
@@ -228,8 +252,8 @@ The configuration file is named `mailbridge-<hostname>.json` so the same set of 
 
 ## 3. IMAP Server — Apache James (`james-project`)
 
-**Source:** `../james-project` (relative to the ICEMail project)
-**Technology:** Forked/enhanced Apache James — a full-featured Java mail server
+**Source:** `IMAP-Apache-James` (separate repository)
+**Technology:** Scaled-down version of Apache James
 
 The James server acts as the IMAP store. It stores mailboxes, delivers and serves messages, and handles all IMAP protocol traffic. It has **no knowledge of the encryption** — from its perspective it is simply storing and serving opaque message content that happens to contain PGP ciphertext.
 
@@ -240,7 +264,7 @@ The James server acts as the IMAP store. It stores mailboxes, delivers and serve
 | IMAPS | 993 | ICEMail Bridge, ICEMail Server | IMAP over TLS. The Bridge connects on behalf of mail clients; the ICEMail Server connects on behalf of browser sessions (web mail) |
 | LMTP | 24 | Postfix | Postfix **pushes** encrypted mail to James after the after-queue filter. James listens and stores the message — it does not fetch or pull from Postfix |
 | WebAdmin REST | 8000 | ICEMail Server | HTTP REST API bound to 127.0.0.1. Used by the ICEMail Server to proxy admin operations (list domains, mailboxes, queues) to the browser |
-| HTTPS user sync | 8282 (outbound) | James | James periodically polls the ICEMail Server's `/api/users` endpoint to synchronise user accounts and hashed passwords |
+| HTTPS user sync | 443 (outbound) | James | James periodically polls the ICEMail Server's `/api/users` endpoint to synchronise user accounts and hashed passwords |
 
 **User synchronisation:**
 James does not have its own user registration UI. Instead it periodically polls the ICEMail Server's `/api/users` endpoint to synchronise user accounts (including hashed passwords). This means user creation in ICEMail is automatically reflected in James without manual administration.
@@ -447,7 +471,7 @@ Browser                    ICEMail Server        Postfix         James
    │   {to, subject, body}        │                  │               │
    │                              │                  │               │
    │             Server sends via SMTP (port 587)    │               │
-   │             AUTH with internal mailer account ─►│               │
+   │             No auth (localhost in mynetworks) ──►│               │
    │             STARTTLS, trust-all cert             │               │
    │                              │                  │               │
    │                              │   Postfix receives plain mail     │
@@ -539,11 +563,11 @@ Thunderbird            ICEMail Bridge            James (IMAP)       ICEMail Serv
 | ICEMail Bridge | James | IMAPS | 993 | Fetch mailboxes and messages for mail client; trust-all TLS |
 | ICEMail Server | James | IMAPS | 993 | Fetch mailboxes and messages for browser web mail sessions; trust-all TLS |
 | ICEMail Bridge | Postfix | SMTP+STARTTLS | 587 | Mail submission from mail client |
-| Browser | ICEMail Server | HTTPS | 8282 | Web app + API |
-| ICEMail Server | Postfix | SMTP+STARTTLS | 587 | Send account confirmation emails |
+| Browser | ICEMail Server | HTTPS | 443 | Web app + API |
+| ICEMail Server | Postfix | SMTP+STARTTLS | 587 | Mail submission (confirmation emails + compose/send); no SMTP auth — localhost is in mynetworks |
 | ICEMail Server | James WebAdmin | HTTP | 8000 | Proxy admin operations to browser (mailboxes, queues, domains) |
 | Postfix | ICEMail Server (after-queue filter) | SMTP | 10026 | Postfix routes all inbound mail into the filter |
 | ICEMail Server (after-queue filter) | Postfix | SMTP | 10027 | Encrypted mail re-injected back to Postfix for final delivery |
 | Postfix | James | LMTP | 24 | Postfix **pushes** encrypted mail to James; James listens and does not pull |
 | Postfix | ICEMail Server | TCP (Dovecot SASL) | 12345 | SMTP AUTH delegation — Postfix asks ICEMail Server to validate credentials |
-| James | ICEMail Server | HTTPS | 8282 | James polls `/api/users` to synchronise user accounts |
+| James | ICEMail Server | HTTPS | 443 | James polls `/api/users` to synchronise user accounts |
