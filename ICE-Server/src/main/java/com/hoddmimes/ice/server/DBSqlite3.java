@@ -449,6 +449,20 @@ public class DBSqlite3 implements DBBase
         }
     }
 
+    public void confirmUserByUsername(String username) throws DBException {
+        String sql = "UPDATE " + DB_TABLE_PROFILE + " SET " + Profile.CONFIRMED + " = 1, " +
+                Profile.CONF_UID + " = NULL WHERE " + Profile.USERNAME + " = ?";
+        try (PreparedStatement stmt = mConnection.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            int rows = stmt.executeUpdate();
+            if (rows == 0) {
+                throw new DBException("No user found with username: " + username);
+            }
+        } catch (SQLException e) {
+            throw new DBException("Failed to confirm user", e);
+        }
+    }
+
     private void ensureDecryptMessagesTable() throws DBException {
         String sql = "CREATE TABLE IF NOT EXISTS " + DB_TABLE_DECRYPT_MESSAGES +
                 " (uid TEXT PRIMARY KEY," +

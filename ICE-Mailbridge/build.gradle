@@ -13,7 +13,7 @@ application {
 
 // Configure shadow jar (fat jar with all dependencies)
 shadowJar {
-    archiveBaseName = 'ice-mailbridge'
+    archiveBaseName = 'ice-bridge'
     archiveClassifier = ''
     archiveVersion = version
     destinationDirectory = file("${buildDir}/distributions")
@@ -25,6 +25,13 @@ shadowJar {
 
     // Merge service files for Log4j2
     mergeServiceFiles()
+    finalizedBy 'copyToRelease'
+}
+
+tasks.register('copyToRelease', Copy) {
+    dependsOn shadowJar
+    from shadowJar.archiveFile
+    into "${rootProject.projectDir}/build-release/release/bridge"
 }
 
 repositories {

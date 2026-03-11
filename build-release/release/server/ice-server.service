@@ -1,0 +1,12 @@
+[Unit]
+Description=ICE-Mailer Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/bash #INSTALL_DIR#/server_run.sh
+WorkingDirectory=#INSTALL_DIR#
+Restart=no
+User=root
+
+[Install]
+WantedBy=multi-user.target

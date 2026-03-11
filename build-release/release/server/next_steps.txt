@@ -1,0 +1,157 @@
+============================================
+            ICEMail README
+============================================
+
+This document is the same for the components ICE Server, ICE Imap and
+ICE Bridge. This very much since all components are closely interconnected.
+
+By the default the components are installed in the directories
+ice server  -   /usr/local/ice-server
+ice imap    -   /usr/local/ice-imap
+ice bridge  -   /usr/local/ice-bridge
+
+The components ice-server, ice-imap and MTA server (postfix) must
+run on the same host.
+
+The bridge that allows standard mail clients as Thunderbird, GMail, Outlook
+to connect to the ICE tailmade server solution should run in the same controlled subnet as
+the mail Client. If running on the same host as the other Ice mail components you have to pay attention
+on how to configure the mail ports i.e. 993,143,587 both the bridge and the imap servers delare listeners
+on 143 and 993. Noth the bridge and the postfix server are listners on 587. The short answer is; let the bridge use
+the standard port 143,993 and 587. let the imap server delare listners on 1143 and 1993 se config ice-imap.json
+Let the postfix accept submissions on port 1586 (masters.cf). Yes such config affects all config files ice-server.json,
+ice-bridge.json, ice-imap.json and master.cf (postfix). If having the bridge on a external host you should be good.
+
+1 Configuration files
+
+ice server  -   /usr/local/ice-server/ice-server.json
+ice imap    -   /usr/local/ice-imap/ice-map.json
+ice bridge  -   /usr/local/ice-bridge/ice-bridge.json
+postfix         /etc/postfix/main.cf and /etc/postfix/master.cf
+
+1.1 ice-server.json
+
+admin/allowed_host  is a list of IP addresses being allowed to access the ICE mail server web Admin interface, you might
+                    to added your favourite host address, wildcards are allowed, like 192.168.1.*
+
+smtp_host           is where the postfix server runs and listening for mail submission requests.
+smtp_port
+
+
+1.2 ice-imap.json
+
+domain      The mail domain handled by the imap server, relates to the DNS MX record. You should be able to setup and run the whole solution using the
+            "localhost" as domain without any global/external dependencies. That was how I started.
+
+lmtp        Local transport used by postfix to interact with the imap server.
+
+imap/port           The ports that the imap server listning on normally 993 and 143. used by the ice-bridge and ice-server
+imap/plainPort
+
+userSync/url    At startup the imap server will sync its user definitions with the ones in the ice-server (master).
+It is assumed that the imap server and imap server are on the same host.
+
+1.3 ice-bridge.json
+
+listenPort          Port on which the bridge will listen on normally 143,993,587. Used by mail clients when connectiing
+imapsListenPort     to the ICE mail service
+smtpListenPort
+
+
+serverBaseUrl       The address where the server components are running i.e. ice-server, ice-imap and postfix server
+
+imapPort            The port to use when access the ice-imap server normally 993
+smtpPort            the post used when connecting and submitting mails i.e. postfix server port.
+smtpHost            the host where the postfix server runs (yes know ambiguous with serverBaseUrl, should be fixed).
+
+1.4 postfix config
+
+Complete sample config files used on the ICEMail test bed are available in the GitHub repository:
+main.cf   - https://github.com/hoddmimes/ICEMail/blob/main/extra/main.cf
+master.cf - https://github.com/hoddmimes/ICEMail/blob/main/extra/master.cf
+
+(Local copies in the ICEMail source repository under extra/main.cf and extra/master.cf)
+
+Below are the main.cf settings that are directly required by the ICE components.
+
+--- main.cf ---
+
+# The mail domain handled by ice-imap. Must NOT be in mydestination.
+virtual_mailbox_domains = <your mail domain>
+
+# Deliver incoming mail to ice-imap via LMTP (port 24).
+# Required by: ice-imap
+virtual_transport = lmtp:inet:127.0.0.1:24
+
+# Pass all incoming mail through the ICE encryption filter before delivery.
+# The filter runs on port 10026 (ice-server PostfixAfterQueueFilter).
+# "encryptor" is a custom transport defined in master.cf.
+# Required by: ice-server (encryption)
+content_filter = encryptor:[127.0.0.1]:10026
+
+# SASL authentication via Dovecot protocol, served by ice-server on port 12345.
+# Required by: ice-server (authenticates SMTP submission users against ICEMail accounts)
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = inet:127.0.0.1:12345
+smtpd_sasl_auth_enable = yes
+
+# Allow submission from localhost without authentication (used by ice-server
+# to send confirmation emails). Required by: ice-server (confirmation mail).
+# Add to the submission service in master.cf:
+#   -o smtpd_recipient_restrictions=permit_mynetworks,permit_sasl_authenticated,reject
+
+---------------
+
+--- master.cf ---
+
+# Submission port for mail clients 587 (bridge forwards SMTP here).
+# Requires SASL auth (ice-server provides Dovecot SASL on 127.0.0.1:12345).
+# Required by: ice-bridge (SMTP submission proxy)
+# 1587 inet n       -       y       -       -       smtpd
+submission inet n       -       y       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_tls_auth_only=yes
+  -o smtpd_client_restrictions=permit_mynetworks,permit_sasl_authenticated,reject
+
+# Custom transport "encryptor" — forwards mail to ice-server encryption filter
+# on port 10026 before final delivery to ice-imap via LMTP.
+# Referenced by content_filter in main.cf.
+# Required by: ice-server (PostfixAfterQueueFilter encryption)
+encryptor unix  -       -       n       -       10      smtp
+  -o smtp_send_xforward_command=yes
+  -o disable_mime_output_conversion=yes
+  -o smtp_tls_security_level=none
+  -o smtp_tls_wrappermode=no
+
+# Re-injection port — ice-server injects the encrypted mail back into Postfix
+# on port 10027 for final delivery to ice-imap via LMTP.
+# content_filter= clears the filter to prevent re-encryption loops.
+# Required by: ice-server (re-injection after encryption)
+127.0.0.1:10027 inet n  -       n       -       -       smtpd
+  -o content_filter=
+  -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks
+  -o local_recipient_maps=
+  -o relay_recipient_maps=
+  -o smtpd_relay_restrictions=permit_mynetworks,reject
+
+---------------
+
+
+
+3. Start the IMAP server:
+     ice-server - /usr/local/ice-server/server_run.sh
+     ice-imap   - /usr/local/ice-imap/ice-imap-run.sh
+     ice-bridge - /usr/local/ice-bridge/bridge_run.sh
+   Or via systemd:
+     systemctl start  ice-server
+     systemctl start  ice-imap
+     systemctl start  ice-bridge
+
+4. Logfiles
+    ice-server  - /usr/local/ice-server/ice-server.log
+    ice-imap    - /usr/local/ice-imap/ice-imap.log
+    ice-bidge   - /usr/local/ice-bridge/ice-bridge.log
+
+

@@ -113,6 +113,17 @@
             background: #c82333;
         }
 
+        button.btn-confirm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+            background: #28a745;
+            color: white;
+        }
+
+        button.btn-confirm:hover {
+            background: #1e7e34;
+        }
+
         .action-cell {
             white-space: nowrap;
             display: flex;
@@ -229,6 +240,7 @@
                     ${user.confirmed ? 'Yes' : 'No'}
                 </td>
                 <td><div class="action-cell">
+                    ${!user.confirmed ? `<button class="btn-confirm" onclick="handleUser('confirm', '${username}')">Confirm</button>` : ''}
                     <button class="btn-block" onclick="handleUser('block', '${username}')">Block</button>
                     <button class="btn-delete" onclick="handleUser('delete', '${username}')">Delete</button>
                 </div></td>
@@ -240,6 +252,8 @@
     async function handleUser(action, username) {
         const confirmMsg = action === 'delete'
             ? 'Are you sure you want to delete user "' + username + '"?'
+            : action === 'confirm'
+            ? 'Confirm user "' + username + '" without email verification?'
             : 'Are you sure you want to block user "' + username + '"?';
 
         if (!confirm(confirmMsg)) {

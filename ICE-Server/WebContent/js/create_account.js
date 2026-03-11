@@ -60,7 +60,7 @@ function create_account_init() {
       }
 
       const altchaWidget = document.getElementById("altcha");
-      const altchaPayload = altchaWidget ? altchaWidget.value : null;
+      const altchaPayload = altchaWidget?.querySelector('input[type="hidden"]')?.value || altchaWidget?.value || null;
       if (!altchaPayload) {
         stsmsg.textContent = "Please complete the CAPTCHA";
         stsmsg.className = "error";

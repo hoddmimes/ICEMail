@@ -1,0 +1,19 @@
+{
+  "listenPort": 143,
+  "plainEnabled": true,
+  "imapsListenPort": 993,
+  "imapsEnabled": true,
+  "imapsCertPath": "#BRIDGE_CERT_PATH#",
+  "imapsKeyPath": "#BRIDGE_KEY_PATH#",
+  "imapHost": "#ICE_SERVER_HOST#",
+  "imapPort": 993,
+  "decryptEnabled": true,
+  "serverBaseUrl": "https://#ICE_SERVER_HOST#",
+  "decryptorClass": "com.hoddmimes.icemail.bridge.MailDecryptor",
+  "loginHandlerClass": "com.hoddmimes.icemail.bridge.BridgeServerLoginHandler",
+  "smtpEnabled": true,
+  "smtpListenPort": 587,
+  "smtpHost": "#ICE_SERVER_HOST#",
+  "smtpPort": 587,
+  "tlsProtocol": "TLSv1.3"
+}

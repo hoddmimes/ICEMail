@@ -24,7 +24,24 @@ shadowJar {
     }
 
     mergeServiceFiles()
+    finalizedBy 'copyToRelease'
 }
+
+tasks.register('copyToRelease', Copy) {
+    dependsOn shadowJar
+    from shadowJar.archiveFile
+    into "${rootProject.projectDir}/build-release/release/server"
+}
+
+tasks.register('zipWebContent', Zip) {
+    archiveFileName = 'WebContent.zip'
+    destinationDirectory = file("${rootProject.projectDir}/build-release/release/server")
+    from('WebContent') {
+        into 'WebContent'
+    }
+}
+
+shadowJar.finalizedBy 'zipWebContent'
 
 repositories {
     mavenCentral()

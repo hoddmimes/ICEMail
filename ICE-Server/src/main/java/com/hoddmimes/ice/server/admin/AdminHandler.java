@@ -142,8 +142,8 @@ public class AdminHandler {
         String action = jBody.get("action").getAsString();
         String username = jBody.get("username").getAsString();
 
-        if (!"block".equals(action) && !"delete".equals(action)) {
-            ctx.status(400).result(JAux.statusResponse(400, "Invalid action: " + action + ". Must be 'block' or 'delete'"));
+        if (!"block".equals(action) && !"delete".equals(action) && !"confirm".equals(action)) {
+            ctx.status(400).result(JAux.statusResponse(400, "Invalid action: " + action + ". Must be 'block', 'delete' or 'confirm'"));
             return;
         }
 
@@ -158,6 +158,10 @@ public class AdminHandler {
                 runUserScript("delete_user.sh", username);
                 LOGGER.info("User \"{}\" deleted by admin", username);
                 ctx.status(200).result(JAux.statusResponse(200, "User \"" + username + "\" has been deleted"));
+            } else if ("confirm".equals(action)) {
+                mDb.confirmUserByUsername(username);
+                LOGGER.info("User \"{}\" confirmed by admin", username);
+                ctx.status(200).result(JAux.statusResponse(200, "User \"" + username + "\" has been confirmed"));
             } else {
                 // TODO: implement block logic
                 LOGGER.info("User \"{}\" blocked by admin", username);
@@ -312,10 +316,11 @@ public class AdminHandler {
      * Authenticates to the SMTP server using the internal mailer credentials.
      */
     private void sendConfirmationEmail(String toAddress, String username, String confUid) throws Exception {
+        boolean useAuth = mInternalMailPassword != null && !mInternalMailPassword.isBlank();
         Properties props = new Properties();
         props.put("mail.smtp.host", mSmtpHost);
         props.put("mail.smtp.port", String.valueOf(mSmtpPort));
-        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.auth", String.valueOf(useAuth));
         if (mSmtpStartTls) {
             props.put("mail.smtp.starttls.enable", "true");
             props.put("mail.smtp.ssl.trust", "*");
@@ -345,7 +350,11 @@ public class AdminHandler {
 
         Transport transport = session.getTransport("smtp");
         try {
-            transport.connect(mSmtpHost, mSmtpPort, mInternalMailUser, mInternalMailPassword);
+            if (useAuth) {
+                transport.connect(mSmtpHost, mSmtpPort, mInternalMailUser, mInternalMailPassword);
+            } else {
+                transport.connect();
+            }
             transport.sendMessage(message, message.getAllRecipients());
             LOGGER.info("Confirmation email sent successfully to {}", toAddress);
         } catch (MessagingException e) {

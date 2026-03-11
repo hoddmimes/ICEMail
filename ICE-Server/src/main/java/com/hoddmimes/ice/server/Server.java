@@ -632,6 +632,7 @@ public class Server
                 staticFiles.directory = jConfig.get("web_content").getAsString(); // relative or absolute path
                 staticFiles.location = Location.EXTERNAL;
             });
+            LOGGER.info("Javalin doc root: {}", new java.io.File(jConfig.get("web_content").getAsString()).getAbsolutePath());
             config.jsonMapper(new JavalinJackson());
             config.jetty.modifyServletContextHandler(handler -> {
                 SessionHandler sessionHandler = new SessionHandler();
