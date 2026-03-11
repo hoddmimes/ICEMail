@@ -1,0 +1,34 @@
+{
+  "domain": "koxnan.com",
+  "workingDirectory": ".",
+  "imap": {
+    "bind": "0.0.0.0",
+    "port": 1993,
+    "plainBind": "0.0.0.0",
+    "plainPort": 1143,
+    "tls": {
+      "keystore": "file:///usr/local/ice-imap/keystore.p12",
+      "keystoreType": "PKCS12",
+      "secret": "changeit"
+    }
+  },
+  "lmtp": {
+    "bind": "127.0.0.1",
+    "port": 24
+  },
+  "webadmin": {
+    "bind": "127.0.0.1",
+    "port": 8000,
+    "user": "admin",
+    "password": "will-be-set-by-ice-server-at-initial-sync"
+  },
+  "database": {
+    "derbyPath": "derby-store",
+    "lucenePath": "lucene-index"
+  },
+  "userSync": {
+      "url": "https://127.0.0.1/api/users",
+    "retryIntervalSeconds": 10,
+    "maxRetries": -1
+  }
+}

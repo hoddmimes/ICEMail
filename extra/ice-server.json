@@ -1,0 +1,48 @@
+{
+  "use_ipv4" : true,
+  "base_url" : "https://www.koxnan.com",
+  "https_port" : 443,
+  "allow_registration" : true,
+  "verbose" : true,
+  "logfile" : null,
+  "interface" : "0.0.0.0",
+  "mail_domain" : "koxnan.com",
+  "imap_host" : "127.0.0.1",
+  "imap_restapi_port" : 8000,
+  "imap_port" : 1993,
+  "imap_ssl" : true,
+  "messages_batch_size" : 100,
+  "ssl": {
+    "cert": "/etc/letsencrypt/live/koxnan.com-0001/fullchain.pem",
+    "key": "/etc/letsencrypt/live/koxnan.com-0001/privkey.pem"
+  },
+  "web_content" : "WebContent",
+  "database" : {
+    "type" : "sqlite3",
+    "configuration" :  {
+      "db_file" : "./ICEMail.sqlite"}
+  },
+  "admin" : { "password" :  "whatever",
+              "allowed_hosts" : ["127.0.0.1","79.136.63.219"] },
+  "internal_mailer" : {
+    "internal_mail_user" : "mailer",
+    "internal_mail_user_password" : "",
+    "smtp_host" : "localhost",
+    "smtp_port" : 1587,
+    "starttls" : true
+  },
+  "dovecot_sasl" : {
+    "enabled" : true,
+    "port" : 12345,
+    "bind_address" : "127.0.0.1"
+  },
+  "altcha" : {
+    "hmac_key" : "cb9f15f2bfc972068cf318750c93de619eab0f3a16ac120a5df3ea46eec85271"
+  },
+  "postfix_after_queue" : {
+    "port" : 10026,
+    "requeue_port" : 10027,
+    "enabled" : true,
+    "decrypt_message_ttl_hours" : 72
+  }
+}

@@ -655,7 +655,7 @@ public class Server
             String adminPassword = jConfig.get("admin").getAsJsonObject().get("password").getAsString();
             String credentials = java.util.Base64.getEncoder()
                     .encodeToString(("admin:" + adminPassword).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            String url = "http://" + mImapHost + ":" + mImapRestapiPort + "/users/" + username;
+            String url = "http://" + mImapHost + ":" + mImapRestapiPort + "/users/" + username + "?force";
             String body = "{\"password\":\"" + hashedPassword + "\"}";
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()

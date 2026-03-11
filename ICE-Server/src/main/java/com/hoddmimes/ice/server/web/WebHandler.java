@@ -544,7 +544,7 @@ public class WebHandler {
             Properties props = new Properties();
             props.put("mail.smtp.host", mSmtpHost);
             props.put("mail.smtp.port", String.valueOf(mSmtpPort));
-            props.put("mail.smtp.auth", "true");
+            props.put("mail.smtp.auth", "false");
             if (mSmtpStartTls) {
                 props.put("mail.smtp.starttls.enable", "true");
                 props.put("mail.smtp.ssl.trust", "*");
@@ -605,7 +605,7 @@ public class WebHandler {
             }
 
             Transport transport = session.getTransport("smtp");
-            transport.connect(mSmtpHost, mSmtpPort, username, pbkdf2Password);
+            transport.connect(mSmtpHost, mSmtpPort, null, null);
             transport.sendMessage(message, message.getAllRecipients());
             transport.close();
 
