@@ -27,7 +27,7 @@
     "lucenePath": "lucene-index"
   },
   "userSync": {
-      "url": "https://127.0.0.1/api/users",
+      "url": "https://127.0.0.1/admin/users",
     "retryIntervalSeconds": 10,
     "maxRetries": -1
   }

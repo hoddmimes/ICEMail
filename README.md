@@ -102,9 +102,10 @@ James has no knowledge of the encryption; to it the messages are just data.
 
 The fork adds two features not in the upstream project:
 
-- **User synchronisation** — James periodically polls the ICEMail Server's `/api/users` REST endpoint to
-  mirror user accounts (usernames and hashed passwords) into its own Derby database. No separate user
-  administration is needed in James.
+- **User synchronisation** — James polls the ICEMail Server at startup to mirror user accounts
+  (usernames and hashed passwords) into its own Derby database. The sync first fetches the admin
+  password from the `/api/admin` endpoint (IP-allowlisted), then uses HTTP Basic Auth to call
+  `/admin/users` (session or Basic Auth protected). No separate user administration is needed in James.
 - **WebAdmin REST API** — An embedded admin API (port 8000, bound to localhost) that the ICEMail Server
   proxies to the browser admin interface, exposing mailbox statistics, queue inspection, and dead-letter
   management.

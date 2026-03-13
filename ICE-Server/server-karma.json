@@ -31,6 +31,10 @@
     "smtp_port" : 587,
     "starttls" : true
   },
+  "admin_notifications" : {
+    "enabled" : true,
+    "mail_address" : "admin@koxnan.com"
+  },
   "dovecot_sasl" : {
     "enabled" : true,
     "port" : 12345,

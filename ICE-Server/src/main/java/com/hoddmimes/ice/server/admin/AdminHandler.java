@@ -52,12 +52,15 @@ public class AdminHandler {
     private final int mSmtpPort;
     private final boolean mSmtpStartTls;
     private final AltchaService mAltchaService;
+    private final boolean mAdminNotificationsEnabled;
+    private final String mAdminNotificationAddress;
     private final ConcurrentHashMap<String, LinkedList<Long>> mRegistrationAttempts = new ConcurrentHashMap<>();
 
     public AdminHandler(DBBase db, String baseUrl, String mailDomain, boolean allowRegistration,
                         String internalMailUser, String internalMailPassword,
                         String smtpHost, int smtpPort, boolean smtpStartTls,
-                        AltchaService altchaService) {
+                        AltchaService altchaService,
+                        boolean adminNotificationsEnabled, String adminNotificationAddress) {
         this.mDb = db;
         this.mBaseUrl = baseUrl;
         this.mMailDomain = mailDomain;
@@ -68,6 +71,8 @@ public class AdminHandler {
         this.mSmtpPort = smtpPort;
         this.mSmtpStartTls = smtpStartTls;
         this.mAltchaService = altchaService;
+        this.mAdminNotificationsEnabled = adminNotificationsEnabled;
+        this.mAdminNotificationAddress = adminNotificationAddress;
     }
 
     private boolean isRateLimited(String ip) {
@@ -255,6 +260,7 @@ public class AdminHandler {
                 }
             }
 
+            sendAdminNotification(tUsername, confMail);
             LOGGER.info("User \"{}\" created successfully, confirmation email sent to {}", tUsername, confMail);
             ctx.status(200).result(JAux.statusResponse(200, "Account created. A confirmation email has been sent to " + confMail + "\n"));
         } catch (Exception e) {
@@ -303,11 +309,65 @@ public class AdminHandler {
             // Create OS user
             runUserScript("create_user.sh", tUsername.toLowerCase());
 
+            sendAdminNotification(tUsername, tParams.get(Profile.CONFIRMATION_MAIL));
             LOGGER.info("User \"{}\" created by admin (confirmed)", tUsername);
             ctx.status(200).result(JAux.statusResponse(200, "User \"" + tUsername + "\" created successfully\n"));
         } catch (Exception e) {
             LOGGER.warn("Failed to create user: {}", e.getMessage());
             ctx.status(500).result(JAux.statusResponse(500, "Failed to create user: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Send an admin notification email when a new user is created, if configured and enabled.
+     */
+    private void sendAdminNotification(String username, String confirmationAddress) {
+        if (!mAdminNotificationsEnabled || mAdminNotificationAddress == null || mAdminNotificationAddress.isBlank()) {
+            return;
+        }
+        try {
+            boolean useAuth = mInternalMailPassword != null && !mInternalMailPassword.isBlank();
+            Properties props = new Properties();
+            props.put("mail.smtp.host", mSmtpHost);
+            props.put("mail.smtp.port", String.valueOf(mSmtpPort));
+            props.put("mail.smtp.auth", String.valueOf(useAuth));
+            if (mSmtpStartTls) {
+                props.put("mail.smtp.starttls.enable", "true");
+                props.put("mail.smtp.ssl.trust", "*");
+                props.put("mail.smtp.ssl.checkserveridentity", "false");
+            }
+
+            Session session = Session.getInstance(props);
+            MimeMessage message = new MimeMessage(session);
+            String fromAddress = mInternalMailUser + "@" + mMailDomain;
+            message.setFrom(new InternetAddress(fromAddress));
+            message.setRecipient(Message.RecipientType.TO, new InternetAddress(mAdminNotificationAddress));
+            message.setSubject("New ICEMail user created: " + username);
+
+            String confInfo = (confirmationAddress != null && !confirmationAddress.isBlank())
+                    ? "Confirmation address: " + confirmationAddress
+                    : "No confirmation address provided (admin-created account).";
+            String htmlBody = "<html><body>" +
+                    "<h2>New ICEMail User Created</h2>" +
+                    "<p>User <strong>" + username + "</strong> has been created.</p>" +
+                    "<p>" + confInfo + "</p>" +
+                    "</body></html>";
+            message.setContent(htmlBody, "text/html; charset=utf-8");
+
+            Transport transport = session.getTransport("smtp");
+            try {
+                if (useAuth) {
+                    transport.connect(mSmtpHost, mSmtpPort, mInternalMailUser, mInternalMailPassword);
+                } else {
+                    transport.connect();
+                }
+                transport.sendMessage(message, message.getAllRecipients());
+                LOGGER.info("Admin notification sent to {} for new user {}", mAdminNotificationAddress, username);
+            } finally {
+                transport.close();
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to send admin notification for user {}: {}", username, e.getMessage());
         }
     }
 

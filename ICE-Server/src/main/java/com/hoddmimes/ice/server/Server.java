@@ -40,6 +40,7 @@ import com.hoddmimes.ice.postfix_filter.PostfixAfterQueueFilter;
 import java.io.FileReader;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -95,6 +96,10 @@ public class Server
 
     // Decrypt message TTL (hours); default 72
     int mDecryptMessageTtlHours = 72;
+
+    // Admin notification configuration
+    boolean mAdminNotificationsEnabled = false;
+    String  mAdminNotificationAddress = null;
 
     // Dovecot SASL server
     DovecotSaslServer mSaslServer;
@@ -197,6 +202,14 @@ public class Server
                 }
                 if (jMailer.has("starttls")) {
                     mInternalMailStartTls = jMailer.get("starttls").getAsBoolean();
+                }
+            }
+
+            if (jConfig.has("admin_notifications")) {
+                JsonObject jNotif = jConfig.get("admin_notifications").getAsJsonObject();
+                mAdminNotificationsEnabled = jNotif.has("enabled") && jNotif.get("enabled").getAsBoolean();
+                if (jNotif.has("mail_address")) {
+                    mAdminNotificationAddress = jNotif.get("mail_address").getAsString();
                 }
             }
 
@@ -462,12 +475,28 @@ public class Server
             }
         });
 
-        // Before handler for /admin/* - requires authentication
+        // Before handler for /admin/* - requires authentication (session or Basic Auth from allowed host)
         mApp.before("/admin/*", ctx -> {
             JsonObject jUser = (JsonObject) ctx.req().getSession().getAttribute("username");
-            if (jUser == null) {
-                throw new HttpResponseException(401, "Not authenticated");
+            if (jUser != null) {
+                return;
             }
+            String authHeader = ctx.header("Authorization");
+            if (authHeader != null && authHeader.startsWith("Basic ")) {
+                JsonObject jAdmin = jConfig.get("admin").getAsJsonObject();
+                if (IpMatcher.matches(ctx.ip(), jAdmin.get("allowed_hosts").getAsJsonArray())) {
+                    String decoded = new String(Base64.getDecoder().decode(authHeader.substring(6)));
+                    int colon = decoded.indexOf(':');
+                    if (colon > 0) {
+                        String user = decoded.substring(0, colon);
+                        String pass = decoded.substring(colon + 1);
+                        if ("admin".equals(user) && jAdmin.get("password").getAsString().equals(pass)) {
+                            return;
+                        }
+                    }
+                }
+            }
+            throw new HttpResponseException(401, "Not authenticated");
         });
 
         // Before handler for /web/* - requires authentication
@@ -481,7 +510,7 @@ public class Server
         // Admin handler for user management
         mAdminHandler = new AdminHandler(db, mBaseUrl, mMailDomain, mAllowRegistration,
                 mInternalMailUser, mInternalMailPassword, mInternalMailSmtpHost, mInternalMailSmtpPort, mInternalMailStartTls,
-                mAltchaService);
+                mAltchaService, mAdminNotificationsEnabled, mAdminNotificationAddress);
 
         // Public endpoints
         mApp.post("/tstpost", Server::testPostS);
@@ -503,10 +532,10 @@ public class Server
         mApp.get("/decrypt-message", ctx -> sInstance.getDecryptMessage(ctx));
 
         // API endpoints (requires authentication)
-        mApp.get("/api/users", Server::getUsersS);
         mApp.get("/api/admin", ctx -> getAdmin(ctx));
 
         // Admin endpoints
+        mApp.get("/admin/users", Server::getUsersS);
         mApp.post("/admin/users", ctx -> mAdminHandler.listUsers(ctx));
         mApp.post("/admin/handleUser", ctx -> mAdminHandler.handleUser(ctx));
         mApp.post("/admin/createUser", ctx -> mAdminHandler.adminCreateUser(ctx));
