@@ -38,7 +38,11 @@ import com.hoddmimes.ice.server.web.WebHandler;
 import com.hoddmimes.ice.postfix_filter.PostfixAfterQueueFilter;
 
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.concurrent.atomic.AtomicLong;
 import java.text.SimpleDateFormat;
 import java.util.Base64;
 import java.util.HashMap;
@@ -100,6 +104,10 @@ public class Server
     // Admin notification configuration
     boolean mAdminNotificationsEnabled = false;
     String  mAdminNotificationAddress = null;
+
+    // Visitor counter (persisted to file)
+    private static final String VISITOR_COUNT_FILE = "./visitor-count.txt";
+    private final AtomicLong mVisitorCount = new AtomicLong(0);
 
     // Dovecot SASL server
     DovecotSaslServer mSaslServer;
@@ -530,6 +538,12 @@ public class Server
         mApp.post("/change_password", ctx -> sInstance.changePassword(ctx));
         mApp.post("/confirm", ctx -> sInstance.confirmAccount(ctx));
         mApp.get("/decrypt-message", ctx -> sInstance.getDecryptMessage(ctx));
+        mApp.get("/visitor-count", ctx -> {
+            long count = sInstance.incrementAndGetVisitorCount();
+            JsonObject resp = new JsonObject();
+            resp.addProperty("count", count);
+            ctx.status(200).contentType("application/json").result(resp.toString());
+        });
 
         // API endpoints (requires authentication)
         mApp.get("/api/admin", ctx -> getAdmin(ctx));
@@ -876,6 +890,26 @@ public class Server
         ctx.status(200).contentType("application/json").result(response.toString());
     }
 
+    private void loadVisitorCount() {
+        try {
+            String content = new String(Files.readAllBytes(Paths.get(VISITOR_COUNT_FILE))).trim();
+            mVisitorCount.set(Long.parseLong(content));
+            LOGGER.info("Visitor count loaded: {}", mVisitorCount.get());
+        } catch (Exception e) {
+            LOGGER.info("No visitor count file found, starting from 0");
+        }
+    }
+
+    private long incrementAndGetVisitorCount() {
+        long count = mVisitorCount.incrementAndGet();
+        try (FileWriter fw = new FileWriter(VISITOR_COUNT_FILE, false)) {
+            fw.write(String.valueOf(count));
+        } catch (IOException e) {
+            LOGGER.warn("Failed to persist visitor count: {}", e.getMessage());
+        }
+        return count;
+    }
+
     private void startDecryptMessageCleanup() {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "decrypt-message-cleanup");
@@ -911,6 +945,7 @@ public class Server
         sInstance = new Server();
             sInstance.logStartupInfo();
             sInstance.loadConfig( args );
+            sInstance.loadVisitorCount();
             sInstance.loadDB();
             sInstance.loadSasl();
             sInstance.loadAfterQueueFilter();
