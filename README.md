@@ -1,17 +1,17 @@
 ## ICEMail
+# Why?
+**_Why would you like to run your own mail server?_**  
+The simple answer is, you do not! Unless you have close to sick desire to for spending time on a
+challenging exercise and/or crazy about your privacy.
 
-The ICE is an abbrivation for
-- **I**: Interrelated
-- **C**: Connectivity
-- **E**: Engagement
+**[Just Google pros/cons](https://www.google.com/search?q=why+should+you+run+your+own+mail+server&oq=why+should+you+run+your+own+mail+server)**
 
-_**Interconnectedness**_, the concept that all phenomena arise in dependence on conditions and are interconnected.
-This emphasizes that every event is part of a larger web of cause and effect, giving it significance in the broader
-context of life. This also in my in line with my foundational beliefs of being a _Causal Determinist_
+_Personally, I have hosted my own mail server for over 20 years. It started off as a fun and interesting project, 
+and it has continued for no particular reason! 😊 However, it hasn't always been enjoyable or intriguing. 
+For me this project was about learning a little bit more about how different mail components are interconnected
+and just have anything to do on my so called, infinite vaccation_.
 
-_That was about the project name_ :smile:
 
----
 
 ## What is ICEMail?
 
@@ -249,8 +249,23 @@ _the run file for ice-imap is in the [IMAP-apache-james]( https://github.com/hod
 
 
 
+The ICE is an abbrivation for
+- **I**: Interrelated
+- **C**: Connectivity
+- **E**: Engagement
+
+_**Interconnectedness**_, the concept that all phenomena arise in dependence on conditions and are interconnected.
+This emphasizes that every event is part of a larger web of cause and effect, giving it significance in the broader
+context of life. This also in my in line with my foundational beliefs of being a _Causal Determinist_
+
+_That was about the project name_ :smile:
+
+---
+
 I have a very first version of the solution up and running for testing on koxnan.com. 
 You might be able to try it out on https://www.koxnan.com/index.html
+
+
 
 
 _That is all folk!_
