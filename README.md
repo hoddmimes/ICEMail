@@ -24,6 +24,9 @@ that is a welcome bonus. It is also my first experience using AI (Claude) as a d
 more productive than expected. _(wounder what the last sentence came from?)_
 
 ---
+<div style="text-align: center;">
+<img src="./doc/architecture.png" alt="Description" style="width: 60%; height: auto;">
+</div>
 
 ## Core Philosophy — Encrypted Everywhere, Keys Nowhere on the Server
 
