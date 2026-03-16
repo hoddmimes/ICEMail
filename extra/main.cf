@@ -118,7 +118,7 @@ relayhost = [mail.smtp2go.com]:465
 smtp_tls_wrappermode = yes
 smtp_tls_security_level = encrypt
 smtp_sasl_auth_enable = yes
-smtp_sasl_password_maps = static:hoddmimes.com:AmaEyi5hTrds0T9f
+smtp_sasl_password_maps = static:hoddmimes.com:xxxxxxxxxxxxxxxxxxxx
 smtp_sasl_security_options = noanonymous
 header_size_limit = 4096000
 
