@@ -96,7 +96,7 @@ smtpd_recipient_restrictions =
    reject_unknown_recipient_domain,
    reject_non_fqdn_sender,
    reject_unknown_sender_domain,
-   reject_rbl_client m5mcw4cye7zin572xvfdp4nccm.zen.dq.spamhaus.net=127.0.0.[2..11],   
+   reject_rbl_client yyyyyyyyyyyyyyyyyyyyyyyyyyy.zen.dq.spamhaus.net=127.0.0.[2..11],   
    permit
 
 
