@@ -166,7 +166,7 @@ encryptor unix  -       -       n       -       10      smtp
 #
 127.0.0.1:10027 inet n  -       n       -       -       smtpd
   -o content_filter=
-  -o receive_override_options=no_unknown_recipient_checks,no_header_body_checks
+  -o receive_override_options=no_address_mappings,no_unknown_recipient_checks,no_header_body_checks
   -o local_recipient_maps=
   -o relay_recipient_maps=
   -o smtpd_relay_restrictions=permit_mynetworks,reject

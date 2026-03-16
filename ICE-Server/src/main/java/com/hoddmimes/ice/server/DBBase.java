@@ -18,6 +18,9 @@ public interface DBBase
     public void confirmUserByUsername( String pUsername ) throws DBException;
     public void updatePassword( String pUsername, String pNewHashedPassword, String pNewPrivateKey ) throws DBException;
 
+    public int countProfiles() throws DBException;
+    public int countActiveUsersLast24h() throws DBException;
+
     public void saveDecryptMessage( String uid, String encryptedBody, String sender, String attachmentsJson ) throws DBException;
     public JsonObject findDecryptMessage( String uid ) throws DBException;
     public int deleteExpiredDecryptMessages( int ttlHours ) throws DBException;

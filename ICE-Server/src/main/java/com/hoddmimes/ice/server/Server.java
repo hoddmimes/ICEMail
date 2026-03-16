@@ -411,6 +411,7 @@ public class Server
                 }
 
                 db.updateLastSeen(username);
+                ServerStats.getInstance().recordLogin();
                 ctx.req().getSession().setAttribute("username", jUser);
                 ctx.req().getSession().setAttribute("role","user");
 
@@ -543,6 +544,24 @@ public class Server
             JsonObject resp = new JsonObject();
             resp.addProperty("count", count);
             ctx.status(200).contentType("application/json").result(resp.toString());
+        });
+
+        // Statistics endpoint (public)
+        mApp.get("/stats", ctx -> {
+            JsonObject data = new JsonObject();
+            try {
+                data.addProperty("totalProfiles", db.countProfiles());
+                data.addProperty("activeUsersLast24h", db.countActiveUsersLast24h());
+            } catch (DBException e) {
+                LOGGER.warn("Stats DB query failed: {}", e.getMessage());
+                data.addProperty("totalProfiles", -1);
+                data.addProperty("activeUsersLast24h", -1);
+            }
+            ServerStats stats = ServerStats.getInstance();
+            data.addProperty("loginsLast24h", stats.loginsLast24h());
+            data.addProperty("mailReceivedLast24h", stats.mailReceivedLast24h());
+            data.addProperty("mailSentLast24h", stats.mailSentLast24h());
+            ctx.status(200).contentType("application/json").result(JAux.statusResponse(data));
         });
 
         // API endpoints (requires authentication)
@@ -929,6 +948,15 @@ public class Server
         LOGGER.info("Decrypt message cleanup scheduled every 15 minutes (ttl={}h)", mDecryptMessageTtlHours);
     }
 
+    private void loadPolicyServer() {
+        if (!jConfig.has("postfix_policy_server")) return;
+        JsonObject jPolicy = jConfig.get("postfix_policy_server").getAsJsonObject();
+        if (!jPolicy.has("enabled") || !jPolicy.get("enabled").getAsBoolean()) return;
+        int port = jPolicy.get("port").getAsInt();
+        new PostfixPolicyServer(port, mMailDomain).start();
+        LOGGER.info("Postfix policy server started on port {}", port);
+    }
+
     private void loadAfterQueueFilter() {
         if (!jConfig.has("postfix_after_queue")) return;
 
@@ -949,6 +977,7 @@ public class Server
             sInstance.loadDB();
             sInstance.loadSasl();
             sInstance.loadAfterQueueFilter();
+            sInstance.loadPolicyServer();
             sInstance.startDecryptMessageCleanup();
             sInstance.loadApp();
             sInstance.declare();

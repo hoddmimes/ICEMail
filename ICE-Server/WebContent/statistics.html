@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mail Statistics</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 600px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0 0 0.3rem 0;
+            color: #333;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 1.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        td.label {
+            color: #444;
+        }
+
+        td.value {
+            font-weight: 600;
+            color: #1a1a2e;
+            text-align: right;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .section-header td {
+            background: #f0f4ff;
+            color: #3a3a7e;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+        }
+
+        .error-msg {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            background: #f8d7da;
+            border-radius: 4px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            margin-top: 1.5rem;
+        }
+
+        button {
+            padding: 0.5rem 1.2rem;
+            font-size: 0.95rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover { background: #0056b3; }
+        button:disabled { background: #999; cursor: not-allowed; }
+
+        .last-updated {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-left: auto;
+        }
+    </style>
+    <script type="text/javascript" src="./js/aux.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>Mail Statistics</h1>
+    <p class="subtitle">Rolling 24-hour window &bull; resets on server restart</p>
+
+    <table id="statsTable">
+        <thead>
+            <tr><th>Metric</th><th style="text-align:right;">Value</th></tr>
+        </thead>
+        <tbody id="statsBody">
+            <tr><td colspan="2" style="color:#888; text-align:center; padding:2rem;">Loading&hellip;</td></tr>
+        </tbody>
+    </table>
+
+    <div id="errorMsg" class="error-msg" style="display:none;"></div>
+
+    <div class="actions">
+        <button id="refreshBtn" onclick="loadStats()">Refresh</button>
+        <span class="last-updated" id="lastUpdated"></span>
+    </div>
+</div>
+
+<script>
+    async function loadStats() {
+        const btn = document.getElementById('refreshBtn');
+        const tbody = document.getElementById('statsBody');
+        const errorMsg = document.getElementById('errorMsg');
+
+        btn.disabled = true;
+        btn.textContent = 'Loading\u2026';
+        errorMsg.style.display = 'none';
+
+        const result = await callServer('/stats', { method: 'GET' });
+
+        btn.disabled = false;
+        btn.textContent = 'Refresh';
+
+        if (!result) {
+            errorMsg.textContent = 'Failed to load statistics.';
+            errorMsg.style.display = 'block';
+            return;
+        }
+
+        const d = result.data;
+
+        tbody.innerHTML = `
+            <tr class="section-header"><td colspan="2">Users</td></tr>
+            <tr>
+                <td class="label">Registered profiles</td>
+                <td class="value">${fmt(d.totalProfiles)}</td>
+            </tr>
+            <tr>
+                <td class="label">Unique users logged in (last 24 h)</td>
+                <td class="value">${fmt(d.activeUsersLast24h)}</td>
+            </tr>
+            <tr class="section-header"><td colspan="2">Activity (last 24 h)</td></tr>
+            <tr>
+                <td class="label">Logins</td>
+                <td class="value">${fmt(d.loginsLast24h)}</td>
+            </tr>
+            <tr>
+                <td class="label">Mails received</td>
+                <td class="value">${fmt(d.mailReceivedLast24h)}</td>
+            </tr>
+            <tr>
+                <td class="label">Mails sent</td>
+                <td class="value">${fmt(d.mailSentLast24h)}</td>
+            </tr>
+        `;
+
+        document.getElementById('lastUpdated').textContent =
+            'Updated ' + new Date().toLocaleTimeString();
+    }
+
+    function fmt(val) {
+        if (val === undefined || val === null) return '—';
+        if (val === -1) return 'N/A';
+        return Number(val).toLocaleString();
+    }
+
+    document.addEventListener('DOMContentLoaded', loadStats);
+</script>
+
+</body>
+</html>

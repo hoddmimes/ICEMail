@@ -77,7 +77,11 @@ The heart of the system. A Java 21 application built on the Javalin/Jetty framew
 - **Dovecot SASL server** — An embedded SASL authentication service that Postfix delegates SMTP AUTH
   decisions to, allowing mail clients to submit mail using their ICEMail credentials without a separate
   user database in Postfix.
-- **Admin interface** — Browser-based administration for managing users and monitoring the IMAP server.
+- **Postfix policy service** — A lightweight TCP policy server (port 10028) that Postfix calls after each
+  successfully submitted message. It records outbound mail statistics and always passes the message through
+  without interfering with delivery.
+- **Admin interface** — Browser-based administration for managing users, monitoring the IMAP server, and
+  viewing server statistics (registered users, logins, mail sent and received in the last 24 hours).
 
 ### ICEMail Bridge — *new development*
 
@@ -123,9 +127,12 @@ It is configured (not coded) to integrate with the ICEMail ecosystem:
 - Accepts re-injected, encrypted mail from the filter on port 10027 and delivers it to James via LMTP on port 24.
 - Accepts authenticated SMTP submission on port 587 (STARTTLS), delegating credential validation to the
   ICEMail Server's SASL server on port 12345.
+- After each successfully submitted message, calls the ICEMail Server's **Postfix policy service** on
+  port 10028 (via `smtpd_end_of_data_restrictions = check_policy_service`) to record sent-mail statistics.
+  The policy service always responds `dunno` — it never rejects mail.
 
 No Postfix source code is touched. The integration is entirely through Postfix's standard
-`content_filter` and `smtpd_sasl_type = dovecot` configuration directives.
+`content_filter`, `smtpd_sasl_type = dovecot`, and `smtpd_end_of_data_restrictions` configuration directives.
 
 ---
 

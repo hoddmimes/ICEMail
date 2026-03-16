@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.hoddmimes.ice.server.DBSqlite3;
+import com.hoddmimes.ice.server.ServerStats;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -231,6 +232,7 @@ public class PostfixAfterQueueFilter extends Thread {
                         if (publicKey != null && !publicKey.isEmpty()) {
                             localRecipients.add(new String[]{rcpt, publicKey});
                         } else {
+                            LOGGER.warn("After-queue filter: no public key found for local user {}, passing through unencrypted", username);
                             externalRecipients.add(rcpt);
                         }
                     } else {
@@ -264,6 +266,7 @@ public class PostfixAfterQueueFilter extends Thread {
                     newHeaders.append("Content-Transfer-Encoding: 7bit\r\n");
 
                     requeue(from, List.of(rcpt), newHeaders + "\r\n" + encryptedBody);
+                    ServerStats.getInstance().recordMailReceived();
                     LOGGER.info("After-queue filter: PGP-encrypted message for {}", rcpt);
                 } catch (Exception e) {
                     LOGGER.warn("After-queue filter: PGP encrypt failed for {}, passing through: {}", rcpt, e.getMessage());

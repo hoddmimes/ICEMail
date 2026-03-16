@@ -44,5 +44,9 @@
     "requeue_port" : 10027,
     "enabled" : true,
     "decrypt_message_ttl_hours" : 72
-  }
+  },
+    "postfix_policy_server" : {
+	"enabled" :true,
+	"port": 10028
+    }
 }

@@ -477,6 +477,29 @@ public class DBSqlite3 implements DBBase
         }
     }
 
+    @Override
+    public int countProfiles() throws DBException {
+        String sql = "SELECT COUNT(*) FROM " + DB_TABLE_PROFILE;
+        try (Statement stmt = mConnection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            return rs.next() ? rs.getInt(1) : 0;
+        } catch (SQLException e) {
+            throw new DBException("Failed to count profiles", e);
+        }
+    }
+
+    @Override
+    public int countActiveUsersLast24h() throws DBException {
+        String sql = "SELECT COUNT(*) FROM " + DB_TABLE_PROFILE +
+                " WHERE " + Profile.LAST_SEEN + " > datetime('now', '-24 hours')";
+        try (Statement stmt = mConnection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            return rs.next() ? rs.getInt(1) : 0;
+        } catch (SQLException e) {
+            throw new DBException("Failed to count active users last 24h", e);
+        }
+    }
+
     private void ensureDecryptMessagesTable() throws DBException {
         String sql = "CREATE TABLE IF NOT EXISTS " + DB_TABLE_DECRYPT_MESSAGES +
                 " (uid TEXT PRIMARY KEY," +
