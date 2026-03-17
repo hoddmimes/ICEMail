@@ -22,8 +22,6 @@ import jakarta.mail.Transport;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -160,7 +158,6 @@ public class AdminHandler {
 
             if ("delete".equals(action)) {
                 mDb.deleteUser(username);
-                runUserScript("delete_user.sh", username);
                 LOGGER.info("User \"{}\" deleted by admin", username);
                 ctx.status(200).result(JAux.statusResponse(200, "User \"" + username + "\" has been deleted"));
             } else if ("confirm".equals(action)) {
@@ -247,9 +244,6 @@ public class AdminHandler {
                 return;
             }
 
-            // Create OS user
-            runUserScript("create_user.sh", tUsername.toLowerCase());
-
             // Send confirmation email using the internal mailer credentials
             String confMail = tParams.get(Profile.CONFIRMATION_MAIL);
             if (confMail != null && !confMail.isEmpty()) {
@@ -305,9 +299,6 @@ public class AdminHandler {
                 ctx.status(500).result(JAux.statusResponse(500, "Failed to create user account, reason: " + e.getMessage() + "\n"));
                 return;
             }
-
-            // Create OS user
-            runUserScript("create_user.sh", tUsername.toLowerCase());
 
             sendAdminNotification(tUsername, tParams.get(Profile.CONFIRMATION_MAIL));
             LOGGER.info("User \"{}\" created by admin (confirmed)", tUsername);
@@ -422,35 +413,6 @@ public class AdminHandler {
             throw e;
         } finally {
             transport.close();
-        }
-    }
-
-    /**
-     * Run a shell script with the given username argument.
-     * The script is expected to be in the server's working directory.
-     */
-    private void runUserScript(String scriptName, String username) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("sudo", "./" + scriptName, username);
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
-
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                LOGGER.info("{} succeeded for user \"{}\": {}", scriptName, username, output.toString().trim());
-            } else {
-                LOGGER.warn("{} failed for user \"{}\" (exit code {}): {}", scriptName, username, exitCode, output.toString().trim());
-            }
-        } catch (Exception e) {
-            LOGGER.warn("Failed to execute {} for user \"{}\": {}", scriptName, username, e.getMessage());
         }
     }
 
