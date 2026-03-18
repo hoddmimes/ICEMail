@@ -32,6 +32,7 @@ import javax.swing.*;
 import java.security.cert.X509Certificate;
 
 import com.hoddmimes.ice.server.admin.AdminHandler;
+import com.hoddmimes.ice.server.admin.AdminMailHandler;
 import com.hoddmimes.ice.server.sasl.DovecotSaslServer;
 import com.hoddmimes.ice.server.web.ContactHandler;
 import com.hoddmimes.ice.server.web.WebHandler;
@@ -90,6 +91,9 @@ public class Server
 
     // Admin handler for user management
     AdminHandler mAdminHandler;
+
+    // Admin mail debug handler
+    AdminMailHandler mAdminMailHandler;
 
     // Internal mailer configuration
     String      mInternalMailUser = null;
@@ -429,6 +433,9 @@ public class Server
                 if (jUser.has(Profile.PRIVATE_KEY) && !jUser.get(Profile.PRIVATE_KEY).isJsonNull()) {
                     jLoginResponse.addProperty("privateKey", jUser.get(Profile.PRIVATE_KEY).getAsString());
                 }
+                if (jUser.has(Profile.PUBLIC_KEY) && !jUser.get(Profile.PUBLIC_KEY).isJsonNull()) {
+                    jLoginResponse.addProperty("publicKey", jUser.get(Profile.PUBLIC_KEY).getAsString());
+                }
                 ctx.status(200).contentType("application/json").result(jLoginResponse.toString());
 
             } catch (DBException e) {
@@ -520,6 +527,9 @@ public class Server
         mAdminHandler = new AdminHandler(db, mBaseUrl, mMailDomain, mAllowRegistration,
                 mInternalMailUser, mInternalMailPassword, mInternalMailSmtpHost, mInternalMailSmtpPort, mInternalMailStartTls,
                 mAltchaService, mAdminNotificationsEnabled, mAdminNotificationAddress);
+
+        // Admin mail debug handler
+        mAdminMailHandler = new AdminMailHandler(db, mImapHost, mImapPort, mImapSsl);
 
         // Public endpoints
         mApp.post("/tstpost", Server::testPostS);
@@ -627,6 +637,10 @@ public class Server
                 ctx.status(502).result(JAux.statusResponse(502, "Failed to reach IMAP server"));
             }
         });
+
+        // Admin mail debug endpoints
+        mApp.get("/admin/mail/messages", ctx -> mAdminMailHandler.listMessages(ctx));
+        mApp.get("/admin/mail/message/raw", ctx -> mAdminMailHandler.getRawMessage(ctx));
 
         // Web API endpoints (requires authentication)
         mWebHandler = new WebHandler(mMessagesBatchSize, mSmtpHost, mSmtpPort, mSmtpStartTls, mMailDomain);
@@ -824,6 +838,15 @@ public class Server
 
     public static int getImapPort() {
         return sInstance.mImapPort;
+    }
+
+    public static String getUserPublicKey( String username) {
+        try {
+            return sInstance.db.findUserPublicKey( username);
+        } catch( Exception e) {
+            LOGGER.warn( "getUserPublicKey failed for {}: {}", username, e.getMessage());
+            return null;
+        }
     }
 
     /**

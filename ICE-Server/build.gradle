@@ -12,7 +12,7 @@ application {
 group = 'com.hoddmimes'
 version = '1.0'
 
-// Configure shadow jar (fat jar with all dependencies)
+// Configure shadow jar (fat jar with all dependencies except BouncyCastle)
 shadowJar {
     archiveBaseName = 'ice-server'
     archiveClassifier = ''
@@ -23,14 +23,38 @@ shadowJar {
         attributes 'Main-Class': application.mainClass
     }
 
+    // Exclude BouncyCastle — shipped as separate JARs in lib/ to preserve
+    // multi-release JAR structure (required for bcpg/bcprov 1.80 compatibility)
+    dependencies {
+        exclude(dependency('org.bouncycastle:.*'))
+    }
+
     mergeServiceFiles()
     finalizedBy 'copyToRelease'
+    finalizedBy 'copyBcToRelease'
 }
 
 tasks.register('copyToRelease', Copy) {
     dependsOn shadowJar
     from shadowJar.archiveFile
     into "${rootProject.projectDir}/build-release/release/server"
+}
+
+tasks.register('copyBcToRelease') {
+    dependsOn shadowJar
+    doLast {
+        def libDir = file("${rootProject.projectDir}/build-release/release/server/lib")
+        libDir.deleteDir()
+        libDir.mkdirs()
+        configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+            .findAll { it.moduleVersion.id.module.group == 'org.bouncycastle' }
+            .each { artifact ->
+                copy {
+                    from artifact.file
+                    into libDir
+                }
+            }
+    }
 }
 
 tasks.register('zipWebContent', Zip) {

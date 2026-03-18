@@ -49,6 +49,13 @@ public class SmtpProxyChannel implements Runnable
 	// Buffer for assembling BDAT chunks before processing (encryption needs the full mail)
 	private StringBuilder bdatBuffer = null;
 
+	// Per-session authentication state — populated on successful AUTH, used to append encrypted Sent copy
+	private String sessionUsername = null;
+	private String sessionHashedPassword = null;
+	private String sessionPlaintextPassword = null;
+	private String sessionEncryptedPrivateKey = null;
+	private String sessionPublicKey = null;
+
 	public SmtpProxyChannel( Socket clientSocket, BridgeConfiguration config, LoginHandler loginHandler)
 	{
 		this.clientSocket = clientSocket;
@@ -280,6 +287,13 @@ public class SmtpProxyChannel implements Runnable
 		String finalUsername = result.isModified() ? result.getUsername() : username;
 		String finalPassword = result.isModified() ? result.getPassword() : password;
 
+		// Save session credentials for encrypted Sent-folder copy after delivery
+		sessionUsername = finalUsername;
+		sessionHashedPassword = finalPassword;
+		sessionPlaintextPassword = password;
+		sessionEncryptedPrivateKey = result.getEncryptedPrivateKey();
+		sessionPublicKey = result.getPublicKey();
+
 		// Construct AUTH PLAIN and send to server
 		String plain = "\0" + finalUsername + "\0" + finalPassword;
 		String base64 = Base64.getEncoder().encodeToString( plain.getBytes( StandardCharsets.UTF_8));
@@ -353,6 +367,12 @@ public class SmtpProxyChannel implements Runnable
 		sendMailToServer( rawMail);
 		resp = readSmtpResponse();
 		sendToClient( resp);
+
+		if( resp.startsWith( "250") && sessionUsername != null && sessionEncryptedPrivateKey != null
+			&& config.isDecryptEnabled())
+		{
+			appendEncryptedSentCopy( rawMail);
+		}
 	}
 
 	/**
@@ -382,6 +402,12 @@ public class SmtpProxyChannel implements Runnable
 		sendMailToServer( rawMail);
 		resp = readSmtpResponse();
 		sendToClient( resp);
+
+		if( resp.startsWith( "250") && sessionUsername != null && sessionEncryptedPrivateKey != null
+			&& config.isDecryptEnabled())
+		{
+			appendEncryptedSentCopy( rawMail);
+		}
 	}
 
 	/**
@@ -439,6 +465,13 @@ public class SmtpProxyChannel implements Runnable
 
 			String finalUsername = result.isModified() ? result.getUsername() : username;
 			String finalPassword = result.isModified() ? result.getPassword() : password;
+
+			// Save session credentials for encrypted Sent-folder copy after delivery
+			sessionUsername = finalUsername;
+			sessionHashedPassword = finalPassword;
+			sessionPlaintextPassword = password;
+			sessionEncryptedPrivateKey = result.getEncryptedPrivateKey();
+		sessionPublicKey = result.getPublicKey();
 
 			String newPlain = authzid + "\0" + finalUsername + "\0" + finalPassword;
 			return Base64.getEncoder().encodeToString( newPlain.getBytes( StandardCharsets.UTF_8));
@@ -641,6 +674,59 @@ public class SmtpProxyChannel implements Runnable
 			return java.security.KeyFactory.getInstance( "RSA").generatePrivate( keySpec);
 		} catch( Exception e) {
 			return java.security.KeyFactory.getInstance( "EC").generatePrivate( keySpec);
+		}
+	}
+
+	/**
+	 * Encrypt the sent mail body with the sender's PGP public key and append
+	 * it to the Sent folder on the upstream IMAP server.
+	 *
+	 * The mail body (everything after the first blank line) is encrypted;
+	 * headers are preserved unchanged so the Sent folder copy looks like a
+	 * normal message to the IMAP client.
+	 */
+	private void appendEncryptedSentCopy( String rawMail)
+	{
+		try
+		{
+			MailBridge.log( Level.INFO, "appendEncryptedSentCopy: preparing encrypted Sent copy for " + sessionUsername);
+
+			if( sessionPublicKey == null)
+			{
+				MailBridge.log( Level.WARN, "appendEncryptedSentCopy: no public key for " + sessionUsername);
+				return;
+			}
+
+			// Split at the blank line separating headers from body
+			int bodyStart = rawMail.indexOf( "\r\n\r\n");
+			if( bodyStart < 0)
+			{
+				MailBridge.log( Level.WARN, "appendEncryptedSentCopy: no header/body separator found");
+				return;
+			}
+			String headers = rawMail.substring( 0, bodyStart);
+			String body    = rawMail.substring( bodyStart + 4);
+
+			String encryptedBody = MailDecryptor.encryptWithPublicKey( body, sessionPublicKey);
+			if( encryptedBody == null)
+			{
+				MailBridge.log( Level.ERROR, "appendEncryptedSentCopy: encryption failed for " + sessionUsername);
+				return;
+			}
+
+			String encryptedMail = headers + "\r\n\r\n" + encryptedBody;
+
+			ImapSentAppender.append(
+				config.getImapHost(),
+				config.getImapPort(),
+				serverSslFactory,
+				sessionUsername,
+				sessionHashedPassword,
+				encryptedMail);
+		}
+		catch( Throwable e)
+		{
+			MailBridge.log( Level.ERROR, "appendEncryptedSentCopy failed for " + sessionUsername, e);
 		}
 	}
 

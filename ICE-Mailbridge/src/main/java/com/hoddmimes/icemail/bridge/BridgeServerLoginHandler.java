@@ -89,8 +89,9 @@ public class BridgeServerLoginHandler implements LoginHandler
 			}
 
 			String encryptedPrivateKey = jResponse.has( "privateKey") ? jResponse.get( "privateKey").getAsString() : null;
+			String publicKey = jResponse.has( "publicKey") ? jResponse.get( "publicKey").getAsString() : null;
 			MailBridge.log( Level.INFO, "BridgeServerLoginHandler: login successful for user: " + username);
-			return LoginResult.modified( username, hashedPassword, encryptedPrivateKey);
+			return LoginResult.modified( username, hashedPassword, encryptedPrivateKey, publicKey);
 		}
 		catch( java.io.IOException e)
 		{

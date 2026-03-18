@@ -217,7 +217,7 @@ public class ProxyChannel implements Runnable
 			if( result.getEncryptedPrivateKey() != null)
 			{
 				MailBridge.log( Level.DEBUG, "Initializing decryptor for user: " + username);
-				decryptor.initialize( result.getEncryptedPrivateKey(), plaintextPassword);
+				decryptor.initialize( result.getEncryptedPrivateKey(), plaintextPassword, result.getPublicKey());
 				MailBridge.log( Level.DEBUG, "Decryptor initialization complete for user: " + username);
 			}
 			else
@@ -297,7 +297,7 @@ public class ProxyChannel implements Runnable
 		if( result.getEncryptedPrivateKey() != null)
 		{
 			MailBridge.log( Level.DEBUG, "Initializing decryptor for user: " + username);
-			decryptor.initialize( result.getEncryptedPrivateKey(), plaintextPassword);
+			decryptor.initialize( result.getEncryptedPrivateKey(), plaintextPassword, result.getPublicKey());
 			MailBridge.log( Level.DEBUG, "Decryptor initialization complete for user: " + username);
 		}
 		else

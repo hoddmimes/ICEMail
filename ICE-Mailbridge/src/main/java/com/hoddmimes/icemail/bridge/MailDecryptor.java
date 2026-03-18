@@ -22,13 +22,28 @@ import org.bouncycastle.openpgp.operator.bc.*;
 import org.bouncycastle.openpgp.PGPPBEEncryptedData;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.security.Security;
 import java.util.Base64;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.bouncycastle.bcpg.ArmoredInputStream;
+import org.bouncycastle.bcpg.ArmoredOutputStream;
+import org.bouncycastle.openpgp.PGPEncryptedData;
+import org.bouncycastle.openpgp.PGPEncryptedDataGenerator;
+import org.bouncycastle.openpgp.PGPLiteralDataGenerator;
+import org.bouncycastle.openpgp.PGPPublicKeyRing;
+import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
+import org.bouncycastle.openpgp.PGPSecretKey;
+import org.bouncycastle.openpgp.operator.bc.BcPGPDataEncryptorBuilder;
+import org.bouncycastle.openpgp.operator.bc.BcPublicKeyKeyEncryptionMethodGenerator;
 
 public class MailDecryptor implements Decryptor
 {
@@ -53,6 +68,7 @@ public class MailDecryptor implements Decryptor
 		Pattern.compile( "-----BEGIN PGP MESSAGE-----(.*?)-----END PGP MESSAGE-----", Pattern.DOTALL);
 
 	private String armoredPrivateKey = null;
+	private String armoredPublicKey = null;
 	private String passphrase = null;
 	private boolean ready = false;
 
@@ -61,7 +77,7 @@ public class MailDecryptor implements Decryptor
 	}
 
 	@Override
-	public void initialize( String encryptedPrivateKey, String plaintextPassword)
+	public void initialize( String encryptedPrivateKey, String plaintextPassword, String publicKey)
 	{
 		if( encryptedPrivateKey == null || plaintextPassword == null)
 		{
@@ -83,11 +99,12 @@ public class MailDecryptor implements Decryptor
 			}
 
 			this.armoredPrivateKey = armored;
+			this.armoredPublicKey = publicKey;
 			this.passphrase = plaintextPassword;
 			this.ready = true;
 			MailBridge.log( Level.INFO, "MailDecryptor: private key unlocked successfully");
 		}
-		catch( Exception e)
+		catch( Throwable e)
 		{
 			MailBridge.log( Level.ERROR, "MailDecryptor.initialize failed", e);
 		}
@@ -192,12 +209,14 @@ public class MailDecryptor implements Decryptor
 	private String pgpSymmetricDecrypt( byte[] encryptedData, String password) throws Exception
 	{
 		// Determine if the data is binary PGP (high bit set on first byte) or ASCII-armored.
-		// We bypass PGPUtil.getDecoderStream() to avoid a hang in BouncyCastle 1.80 on binary data.
+		// Use ArmoredInputStream directly for armored data to avoid loading PGPUtil, whose
+		// static initialiser references org.bouncycastle.asn1.cryptlib.CryptlibObjectIdentifiers —
+		// a class removed in bcprov 1.80 — which causes NoClassDefFoundError in a fat JAR.
 		boolean isBinary = (encryptedData[0] & 0x80) != 0;
 		MailBridge.log( Level.DEBUG, "pgpSymmetricDecrypt: data length=" + encryptedData.length + " format=" + (isBinary ? "binary" : "armored"));
 		InputStream in = isBinary
 			? new ByteArrayInputStream( encryptedData)
-			: PGPUtil.getDecoderStream( new ByteArrayInputStream( encryptedData));
+			: new ArmoredInputStream( new ByteArrayInputStream( encryptedData));
 
 		PGPObjectFactory factory = new PGPObjectFactory( in, new BcKeyFingerprintCalculator());
 
@@ -259,13 +278,13 @@ public class MailDecryptor implements Decryptor
 	private String pgpDecrypt( String armoredMessage, String armoredSecretKey, String passphrase) throws Exception
 	{
 		// Load secret key ring
-		InputStream keyIn = PGPUtil.getDecoderStream(
+		InputStream keyIn = new ArmoredInputStream(
 			new ByteArrayInputStream( armoredSecretKey.getBytes( StandardCharsets.UTF_8)));
 		PGPSecretKeyRingCollection secretKeyRings =
 			new PGPSecretKeyRingCollection( keyIn, new BcKeyFingerprintCalculator());
 
 		// Parse the encrypted message
-		InputStream msgIn = PGPUtil.getDecoderStream(
+		InputStream msgIn = new ArmoredInputStream(
 			new ByteArrayInputStream( armoredMessage.getBytes( StandardCharsets.UTF_8)));
 		PGPObjectFactory factory = new PGPObjectFactory( msgIn, new BcKeyFingerprintCalculator());
 
@@ -333,6 +352,99 @@ public class MailDecryptor implements Decryptor
 
 		MailBridge.log( Level.ERROR, "MailDecryptor: unexpected PGP object type after decryption");
 		return null;
+	}
+
+	/**
+	 * Encrypt plaintext using the user's PGP public key (extracted from the stored private key).
+	 * Returns an armored PGP message block suitable for storage as a sent-mail body.
+	 * Used by the SMTP proxy to save an encrypted copy in the user's Sent folder.
+	 *
+	 * @param plaintext The plaintext to encrypt (mail body)
+	 * @return Armored PGP MESSAGE block, or null on failure
+	 */
+	public String encryptForSentFolder( String plaintext)
+	{
+		if( !ready || armoredPublicKey == null)
+		{
+			MailBridge.log( Level.WARN, "encryptForSentFolder: decryptor not ready or no public key");
+			return null;
+		}
+		return encryptWithPublicKey( plaintext, armoredPublicKey);
+	}
+
+	/**
+	 * Encrypt plaintext using the given armored PGP public key.
+	 * Static so callers that already have the public key (e.g. SmtpProxyChannel)
+	 * can encrypt without instantiating or initializing a full MailDecryptor.
+	 */
+	public static String encryptWithPublicKey( String plaintext, String armoredPublicKey)
+	{
+		if( armoredPublicKey == null)
+		{
+			MailBridge.log( Level.WARN, "encryptWithPublicKey: no public key provided");
+			return null;
+		}
+
+		try
+		{
+			// Load the sender's public key ring directly — no secret key ring needed
+			InputStream keyIn = new ArmoredInputStream(
+				new ByteArrayInputStream( armoredPublicKey.getBytes( StandardCharsets.UTF_8)));
+			PGPPublicKeyRingCollection publicKeyRings =
+				new PGPPublicKeyRingCollection( keyIn, new BcKeyFingerprintCalculator());
+
+			PGPPublicKey encryptionKey = null;
+			outer:
+			for( Iterator<PGPPublicKeyRing> rings = publicKeyRings.getKeyRings(); rings.hasNext(); )
+			{
+				PGPPublicKeyRing ring = rings.next();
+				for( Iterator<PGPPublicKey> keys = ring.getPublicKeys(); keys.hasNext(); )
+				{
+					PGPPublicKey pk = keys.next();
+					if( pk.isEncryptionKey())
+					{
+						encryptionKey = pk;
+						break outer;
+					}
+				}
+			}
+
+			if( encryptionKey == null)
+			{
+				MailBridge.log( Level.ERROR, "encryptWithPublicKey: no encryption public key found");
+				return null;
+			}
+
+			byte[] plaintextBytes = plaintext.getBytes( StandardCharsets.UTF_8);
+			ByteArrayOutputStream encOut = new ByteArrayOutputStream();
+			ArmoredOutputStream armoredOut = new ArmoredOutputStream( encOut);
+
+			BcPGPDataEncryptorBuilder encBuilder = new BcPGPDataEncryptorBuilder( PGPEncryptedData.AES_256)
+				.setWithIntegrityPacket( true)
+				.setSecureRandom( new SecureRandom());
+
+			PGPEncryptedDataGenerator encGen = new PGPEncryptedDataGenerator( encBuilder);
+			encGen.addMethod( new BcPublicKeyKeyEncryptionMethodGenerator( encryptionKey));
+
+			PGPLiteralDataGenerator ldGen = new PGPLiteralDataGenerator();
+			try( OutputStream encStream = encGen.open( armoredOut, new byte[1 << 16]))
+			{
+				try( OutputStream ldStream = ldGen.open( encStream, PGPLiteralData.BINARY, "",
+					plaintextBytes.length, new Date()))
+				{
+					ldStream.write( plaintextBytes);
+				}
+			}
+			armoredOut.close();
+
+			MailBridge.log( Level.DEBUG, "encryptForSentFolder: body encrypted successfully");
+			return encOut.toString( StandardCharsets.UTF_8);
+		}
+		catch( Exception e)
+		{
+			MailBridge.log( Level.ERROR, "encryptForSentFolder failed", e);
+			return null;
+		}
 	}
 
 	/**

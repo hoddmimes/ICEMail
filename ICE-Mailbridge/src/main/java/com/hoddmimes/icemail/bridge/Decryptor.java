@@ -40,12 +40,13 @@ public interface Decryptor
 
 	/**
 	 * Initialize the decryptor for a user session.
-	 * Called at login time with the encrypted private key returned by the ICEMail server
-	 * and the user's plaintext password needed to unlock it.
+	 * Called at login time with the encrypted private key and public key returned by the ICEMail server
+	 * and the user's plaintext password needed to unlock the private key.
 	 *
 	 * @param encryptedPrivateKey Base64-encoded PGP-symmetric-encrypted armored PGP private key
 	 * @param plaintextPassword   The user's plaintext password (used both to decrypt the key wrapper
 	 *                            and as the PGP key passphrase)
+	 * @param publicKey           Armored PGP public key (used to encrypt the Sent copy)
 	 */
-	void initialize( String encryptedPrivateKey, String plaintextPassword);
+	void initialize( String encryptedPrivateKey, String plaintextPassword, String publicKey);
 }

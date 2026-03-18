@@ -50,11 +50,18 @@ public interface LoginHandler
 		private final String encryptedPrivateKey;
 
 		/**
+		 * The user's armored PGP public key returned by the ICEMail server on successful login.
+		 * Used to encrypt the Sent copy without loading the secret key ring.
+		 * Null if the server did not return one (e.g. passthrough handler).
+		 */
+		private final String publicKey;
+
+		/**
 		 * Create a pass-through result (unchanged credentials).
 		 */
 		public static LoginResult passthrough( String username, String password)
 		{
-			return new LoginResult( username, password, false, false, null, null);
+			return new LoginResult( username, password, false, false, null, null, null);
 		}
 
 		/**
@@ -62,15 +69,15 @@ public interface LoginHandler
 		 */
 		public static LoginResult modified( String newUsername, String newPassword)
 		{
-			return new LoginResult( newUsername, newPassword, true, false, null, null);
+			return new LoginResult( newUsername, newPassword, true, false, null, null, null);
 		}
 
 		/**
-		 * Create a modified result with new credentials and an encrypted private key.
+		 * Create a modified result with new credentials, encrypted private key and public key.
 		 */
-		public static LoginResult modified( String newUsername, String newPassword, String encryptedPrivateKey)
+		public static LoginResult modified( String newUsername, String newPassword, String encryptedPrivateKey, String publicKey)
 		{
-			return new LoginResult( newUsername, newPassword, true, false, null, encryptedPrivateKey);
+			return new LoginResult( newUsername, newPassword, true, false, null, encryptedPrivateKey, publicKey);
 		}
 
 		/**
@@ -78,10 +85,10 @@ public interface LoginHandler
 		 */
 		public static LoginResult blocked( String reason)
 		{
-			return new LoginResult( null, null, false, true, reason, null);
+			return new LoginResult( null, null, false, true, reason, null, null);
 		}
 
-		private LoginResult( String username, String password, boolean modified, boolean blocked, String blockReason, String encryptedPrivateKey)
+		private LoginResult( String username, String password, boolean modified, boolean blocked, String blockReason, String encryptedPrivateKey, String publicKey)
 		{
 			this.username = username;
 			this.password = password;
@@ -89,6 +96,7 @@ public interface LoginHandler
 			this.blocked = blocked;
 			this.blockReason = blockReason;
 			this.encryptedPrivateKey = encryptedPrivateKey;
+			this.publicKey = publicKey;
 		}
 
 		public String getUsername()
@@ -119,6 +127,11 @@ public interface LoginHandler
 		public String getEncryptedPrivateKey()
 		{
 			return encryptedPrivateKey;
+		}
+
+		public String getPublicKey()
+		{
+			return publicKey;
 		}
 
 		/**

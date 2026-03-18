@@ -64,6 +64,28 @@ imapPort            The port to use when access the ice-imap server normally 993
 smtpPort            the post used when connecting and submitting mails i.e. postfix server port.
 smtpHost            the host where the postfix server runs (yes know ambiguous with serverBaseUrl, should be fixed).
 
+decryptEnabled      When true (the recommended setting with BridgeServerLoginHandler), the bridge will:
+                      - Decrypt incoming PGP-encrypted messages before handing them to the mail client.
+                      - After each successful SMTP submission, encrypt the outgoing message with the
+                        sender's own PGP public key and save an encrypted copy to the sender's Sent
+                        folder on the IMAP server.
+
+IMPORTANT — disable the mail client's built-in "Save sent copy" feature.
+
+Standard mail clients (Thunderbird, Outlook, Apple Mail, etc.) save a copy of every sent message to
+the Sent folder themselves via an IMAP APPEND command. That copy is plaintext — the mail client has no
+knowledge of the ICEMail PGP encryption scheme.
+
+The ICEMail Bridge already saves an encrypted Sent copy automatically after every successful SMTP
+delivery (when decryptEnabled = true). If the mail client also saves its own copy, the Sent folder
+will contain both an encrypted copy (from the bridge) and a plaintext copy (from the client).
+
+To prevent the plaintext copy, configure your mail client to NOT save sent messages:
+
+  Thunderbird:  Account Settings -> Copies & Folders -> uncheck "Place a copy in" under "When sending messages"
+  Apple Mail:   Preferences -> Accounts -> (account) -> uncheck "Store sent messages on the server"
+  Outlook:      File -> Options -> Mail -> uncheck "Save copies of messages in the Sent Items folder"
+
 1.4 postfix config
 
 Complete sample config files used on the ICEMail test bed are available in the GitHub repository:

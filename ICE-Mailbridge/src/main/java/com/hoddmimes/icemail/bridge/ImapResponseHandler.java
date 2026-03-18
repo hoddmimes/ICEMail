@@ -86,6 +86,7 @@ public class ImapResponseHandler
 		// No literal — process any encrypted content in the FETCH line itself (e.g. ENVELOPE subject)
 		if( containsEncryptedContent( fetchData))
 		{
+			MailBridge.log( Level.INFO, "FETCH msg " + sequenceNumber + ": envelope/metadata");
 			return processFetchData( line);
 		}
 
@@ -159,12 +160,33 @@ public class ImapResponseHandler
 	{
 		String result = fullResponse;
 
+		// Determine the sequence number for logging
+		Matcher seqMatcher = FETCH_PATTERN.matcher( fullResponse);
+		String seqNum = seqMatcher.find() ? seqMatcher.group(1) : "?";
+
 		// Decrypt subject if present
 		result = decryptEnvelopeSubject( result);
 		result = decryptHeaderSubject( result);
 
+		// Check for PGP block before decryption to decide what to log
+		boolean wasEncrypted = fullResponse.contains( "-----BEGIN PGP MESSAGE-----");
+
 		// Decrypt body content
 		result = decryptBody( result);
+
+		boolean stillEncrypted = result.contains( "-----BEGIN PGP MESSAGE-----");
+		if( wasEncrypted && !stillEncrypted)
+		{
+			MailBridge.log( Level.INFO, "FETCH msg " + seqNum + ": decrypted");
+		}
+		else if( wasEncrypted)
+		{
+			MailBridge.log( Level.INFO, "FETCH msg " + seqNum + ": encrypted (decryption not available)");
+		}
+		else
+		{
+			MailBridge.log( Level.INFO, "FETCH msg " + seqNum + ": plain");
+		}
 
 		// Update the IMAP literal {N} byte count to match the (possibly changed) content size.
 		// Strict clients like iOS Mail read exactly N bytes; a stale count corrupts the stream.

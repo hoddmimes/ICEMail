@@ -97,9 +97,20 @@ standard IMAP/SMTP mail client to work transparently with the ICEMail encrypted 
   are decrypted on the fly using the user's PGP private key before being passed to the mail client.
 - **SMTP proxy** — Optionally listens for SMTP submission from the mail client and proxies it to Postfix,
   again hashing the password in transit so the credential reaching the server is always the PBKDF2 hash.
+  After each successfully delivered message the bridge automatically saves an encrypted copy to the
+  sender's Sent folder on the IMAP server using the sender's own PGP public key.
 
 The mail client needs no plugins and no knowledge of PGP. From its perspective it is talking to a normal
 IMAP/SMTP server.
+
+> **Important — disable the mail client's own "Save sent copy" setting.**
+> Standard mail clients (Thunderbird, Outlook, Apple Mail, etc.) save a copy of every sent message to
+> the Sent folder themselves via IMAP APPEND. That copy is **plaintext** — the client has no knowledge
+> of the ICEMail PGP encryption. The ICEMail Bridge already saves an encrypted Sent copy automatically
+> after every successful SMTP submission. To avoid a plaintext duplicate alongside the encrypted copy,
+> you must configure your mail client to **not** save sent messages.
+>
+> In **Thunderbird**: Account Settings → Copies & Folders → uncheck *Place a copy in* under "When sending messages".
 
 ### Apache James (IMAP server) — *forked and extended*
 
@@ -164,7 +175,7 @@ All mail delivered to a user whose mailbox is hosted on the ICEMail server is en
 
 **All messages persisted in the ICEMail IMAP server are PGP-encrypted — without exception.** There is no plaintext mail at rest anywhere in the system.
 
-This encryption is applied regardless of where the mail originates — whether from another ICEMail user, an external sender, or a mailing list.
+This encryption is applied regardless of where the mail originates — whether from another ICEMail user, an external sender, or a mailing list. Sent mail copies stored in the Sent folder are also encrypted: the ICEMail Bridge encrypts the outgoing message with the **sender's own PGP public key** before appending it to the Sent folder, so Sent mail is as protected as received mail. (Mail clients must be configured not to save their own plaintext Sent copy — see the Bridge section above.)
 
 ### Mail to External Recipients
 

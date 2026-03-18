@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mail Inspector</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            background: white;
+            padding: 1.5rem;
+            max-width: 1100px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        h2 {
+            font-size: 1.1rem;
+            margin: 1.5rem 0 0.5rem;
+            color: #555;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+
+        .filter-row select {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 0.5rem 1.2rem;
+            font-size: 1rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        th, td {
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        tbody tr {
+            cursor: pointer;
+        }
+
+        tbody tr:hover {
+            background: #e8f0fe;
+        }
+
+        tbody tr.selected {
+            background: #cfe2ff;
+        }
+
+        td {
+            font-size: 0.9rem;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #666;
+            padding: 2rem;
+        }
+
+        .raw-panel {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            overflow: auto;
+            max-height: 480px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.82rem;
+            white-space: pre;
+            line-height: 1.4;
+        }
+
+        .raw-panel.placeholder {
+            color: #666;
+            background: #f8f9fa;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 0.9rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 80px;
+        }
+
+        .statusMessage {
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .statusMessage.error {
+            color: #721c24;
+            background: #f8d7da;
+        }
+
+        .statusMessage.info {
+            color: #0c5460;
+            background: #d1ecf1;
+        }
+
+        a.back-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        a.back-link:hover {
+            color: #0056b3;
+        }
+
+        .section-divider {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 1.2rem 0;
+        }
+    </style>
+    <script type="text/javascript" src="../js/aux.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>Mail Inspector</h1>
+
+    <div class="filter-row">
+        <select id="userSelect" onchange="onUserChange()">
+            <option value="">-- Select user --</option>
+        </select>
+        <select id="folderSelect" disabled>
+            <option value="">-- Select mailbox --</option>
+        </select>
+        <button id="loadBtn" onclick="loadMessages()" disabled>Load</button>
+    </div>
+
+    <div id="statusMessage" class="statusMessage" style="display: none;"></div>
+
+    <hr class="section-divider" />
+
+    <h2 id="msgListTitle" style="display: none;"></h2>
+    <table id="msgTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Subject</th>
+            </tr>
+        </thead>
+        <tbody id="msgBody"></tbody>
+    </table>
+
+    <hr id="rawDivider" class="section-divider" style="display: none;" />
+
+    <h2 id="rawTitle" style="display: none;">Raw Message</h2>
+    <div id="rawPanel" class="raw-panel placeholder" style="display: none;">Select a message to view its raw content.</div>
+
+    <a class="back-link" href="index.html">&larr; Back to Admin</a>
+</div>
+
+<script>
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    var selectedRow = null;
+
+    async function loadUsers() {
+        var select = document.getElementById('userSelect');
+        try {
+            var result = await callServer('/admin/users', {
+                method: 'POST',
+                body: JSON.stringify({ filter: '' })
+            });
+            if (!result) return;
+            var users = result.data || [];
+            users.forEach(function(user) {
+                var opt = document.createElement('option');
+                opt.value = user.username;
+                opt.textContent = user.username;
+                select.appendChild(opt);
+            });
+        } catch (err) {
+            showStatus('Failed to load users: ' + err.message, 'error');
+        }
+    }
+
+    async function onUserChange() {
+        var username = document.getElementById('userSelect').value;
+        var folderSel = document.getElementById('folderSelect');
+        var loadBtn = document.getElementById('loadBtn');
+
+        // Reset folder list and message view
+        folderSel.innerHTML = '<option value="">-- Select mailbox --</option>';
+        folderSel.disabled = true;
+        loadBtn.disabled = true;
+        clearMessages();
+        clearRaw();
+        hideStatus();
+
+        if (!username) return;
+
+        try {
+            var response = await fetch('/admin/imap/mailboxes?user=' + encodeURIComponent(username));
+            if (response.status === 401) { window.location.href = '/login.html'; return; }
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+
+            var mailboxes = await response.json();
+            if (!Array.isArray(mailboxes) || mailboxes.length === 0) {
+                showStatus('No mailboxes found for user: ' + escapeHtml(username), 'info');
+                return;
+            }
+
+            mailboxes.forEach(function(mb) {
+                var opt = document.createElement('option');
+                opt.value = mb.mailboxName || '';
+                opt.textContent = mb.mailboxName || '';
+                folderSel.appendChild(opt);
+            });
+            folderSel.disabled = false;
+            loadBtn.disabled = false;
+        } catch (err) {
+            showStatus('Failed to load mailboxes: ' + err.message, 'error');
+        }
+    }
+
+    async function loadMessages() {
+        var username = document.getElementById('userSelect').value;
+        var folder = document.getElementById('folderSelect').value;
+        var loadBtn = document.getElementById('loadBtn');
+
+        if (!username || !folder) {
+            showStatus('Please select a user and mailbox.', 'error');
+            return;
+        }
+
+        loadBtn.disabled = true;
+        loadBtn.textContent = 'Loading...';
+        clearMessages();
+        clearRaw();
+        hideStatus();
+
+        try {
+            var url = '/admin/mail/messages?user=' + encodeURIComponent(username) + '&folder=' + encodeURIComponent(folder);
+            var response = await fetch(url);
+            if (response.status === 401) { window.location.href = '/login.html'; return; }
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+
+            var json = await response.json();
+            var data = json.data || {};
+            var messages = data.messages || [];
+            var total = data.total || 0;
+
+            var title = document.getElementById('msgListTitle');
+            title.textContent = escapeHtml(folder) + ' — ' + total + ' message(s)';
+            title.style.display = 'block';
+
+            var tbody = document.getElementById('msgBody');
+            var table = document.getElementById('msgTable');
+
+            if (messages.length === 0) {
+                table.style.display = 'table';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-message">No messages in this folder.</td></tr>';
+            } else {
+                table.style.display = 'table';
+                messages.forEach(function(msg) {
+                    var row = document.createElement('tr');
+                    row.dataset.msgNum = msg.messageNumber;
+
+                    var cells = [
+                        msg.messageNumber,
+                        escapeHtml(msg.date),
+                        escapeHtml(msg.from),
+                        escapeHtml(msg.to),
+                        escapeHtml(msg.subject)
+                    ];
+                    cells.forEach(function(text) {
+                        var td = document.createElement('td');
+                        td.textContent = text;
+                        row.appendChild(td);
+                    });
+
+                    row.addEventListener('click', function() { selectMessage(row, msg.messageNumber); });
+                    tbody.appendChild(row);
+                });
+            }
+        } catch (err) {
+            showStatus('Failed to load messages: ' + err.message, 'error');
+        }
+
+        loadBtn.disabled = false;
+        loadBtn.textContent = 'Load';
+    }
+
+    async function selectMessage(row, msgNum) {
+        if (selectedRow) selectedRow.classList.remove('selected');
+        selectedRow = row;
+        row.classList.add('selected');
+
+        var username = document.getElementById('userSelect').value;
+        var folder = document.getElementById('folderSelect').value;
+
+        var rawPanel = document.getElementById('rawPanel');
+        rawPanel.className = 'raw-panel placeholder';
+        rawPanel.style.display = 'flex';
+        rawPanel.textContent = 'Loading…';
+
+        document.getElementById('rawDivider').style.display = 'block';
+        document.getElementById('rawTitle').style.display = 'block';
+
+        try {
+            var url = '/admin/mail/message/raw?user=' + encodeURIComponent(username) +
+                      '&folder=' + encodeURIComponent(folder) +
+                      '&msg=' + encodeURIComponent(msgNum);
+            var response = await fetch(url);
+            if (response.status === 401) { window.location.href = '/login.html'; return; }
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+
+            var json = await response.json();
+            var raw = (json.data || {}).raw || '';
+
+            rawPanel.className = 'raw-panel';
+            rawPanel.style.display = 'block';
+            rawPanel.textContent = raw;
+        } catch (err) {
+            rawPanel.className = 'raw-panel placeholder';
+            rawPanel.style.display = 'flex';
+            rawPanel.textContent = 'Error loading message: ' + err.message;
+        }
+    }
+
+    function clearMessages() {
+        selectedRow = null;
+        document.getElementById('msgListTitle').style.display = 'none';
+        document.getElementById('msgTable').style.display = 'none';
+        document.getElementById('msgBody').innerHTML = '';
+    }
+
+    function clearRaw() {
+        document.getElementById('rawDivider').style.display = 'none';
+        document.getElementById('rawTitle').style.display = 'none';
+        document.getElementById('rawPanel').style.display = 'none';
+        document.getElementById('rawPanel').textContent = '';
+    }
+
+    function showStatus(msg, type) {
+        var el = document.getElementById('statusMessage');
+        el.style.display = 'block';
+        el.className = 'statusMessage ' + (type || 'info');
+        el.textContent = msg;
+    }
+
+    function hideStatus() {
+        document.getElementById('statusMessage').style.display = 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', loadUsers);
+</script>
+
+</body>
+</html>

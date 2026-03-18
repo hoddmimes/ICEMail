@@ -3,8 +3,10 @@ package com.hoddmimes.ice.server.web;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.hoddmimes.ice.postfix_filter.PgpEncryptor;
 import com.hoddmimes.ice.server.JAux;
 import com.hoddmimes.ice.server.Profile;
+import com.hoddmimes.ice.server.Server;
 import com.hoddmimes.ice.server.ServerStats;
 
 import org.apache.logging.log4j.LogManager;
@@ -34,6 +36,7 @@ import jakarta.mail.util.ByteArrayDataSource;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -611,6 +614,7 @@ public class WebHandler {
             transport.close();
 
             LOGGER.info("Message sent by {} to {}", username, to);
+            appendSentCopy(ctx, message, username, pbkdf2Password);
             ctx.status(200).result(JAux.statusResponse(200, "Message sent"));
 
         } catch (MessagingException e) {
@@ -619,6 +623,67 @@ public class WebHandler {
         } catch (IOException e) {
             LOGGER.warn("Failed to read attachment: {}", e.getMessage());
             ctx.status(500).result(JAux.statusResponse(500, "Failed to read attachment"));
+        }
+    }
+
+    /**
+     * Encrypt the sent message body with the sender's PGP public key and append
+     * an encrypted copy to the user's Sent folder via the existing IMAP session.
+     * Failures are logged as warnings — they must not affect the send response.
+     */
+    private void appendSentCopy(Context ctx, MimeMessage message, String username, String pbkdf2Password) {
+        try {
+            Store store = (Store) ctx.req().getSession().getAttribute("imap_session");
+            if (store == null || !store.isConnected()) {
+                LOGGER.warn("appendSentCopy: no active IMAP session for user {}", username);
+                return;
+            }
+
+            String publicKey = Server.getUserPublicKey(username);
+            if (publicKey == null) {
+                LOGGER.warn("appendSentCopy: no public key found for user {}", username);
+                return;
+            }
+
+            // Serialize message to RFC 822 format
+            ByteArrayOutputStream rawOut = new ByteArrayOutputStream();
+            message.writeTo(rawOut);
+            String rawMail = rawOut.toString("UTF-8");
+
+            // Split at the header/body separator (blank line)
+            int sepIdx = rawMail.indexOf("\r\n\r\n");
+            String sep = "\r\n\r\n";
+            if (sepIdx < 0) {
+                sepIdx = rawMail.indexOf("\n\n");
+                sep = "\n\n";
+            }
+            if (sepIdx < 0) {
+                LOGGER.warn("appendSentCopy: cannot locate header/body separator for user {}", username);
+                return;
+            }
+
+            String headers = rawMail.substring(0, sepIdx);
+            String body    = rawMail.substring(sepIdx + sep.length());
+
+            String encryptedBody = PgpEncryptor.encrypt(body, publicKey);
+            String encryptedMail = headers + sep + encryptedBody;
+
+            // Build a MimeMessage from the encrypted bytes and append to Sent folder
+            byte[] encBytes = encryptedMail.getBytes("UTF-8");
+            Session plainSession = Session.getInstance(new Properties());
+            MimeMessage sentMessage = new MimeMessage(plainSession, new ByteArrayInputStream(encBytes));
+
+            Folder sentFolder = store.getFolder("Sent");
+            if (!sentFolder.exists()) {
+                sentFolder.create(Folder.HOLDS_MESSAGES);
+            }
+            sentFolder.open(Folder.READ_WRITE);
+            sentFolder.appendMessages(new Message[]{ sentMessage });
+            sentFolder.close(false);
+
+            LOGGER.info("appendSentCopy: encrypted sent copy saved to Sent folder for {}", username);
+        } catch (Exception e) {
+            LOGGER.warn("appendSentCopy: failed for user {}: {}", username, e.getMessage());
         }
     }
 
