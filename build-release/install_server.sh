@@ -80,6 +80,7 @@ cp "$RELEASE_DIR/ice-server-1.0.jar"  "$SERVER_DIR/"
 cp "$RELEASE_DIR/log4j2.xml"           "$SERVER_DIR/"
 cp "$RELEASE_DIR/server_run.sh"        "$SERVER_DIR/"
 chmod +x "$SERVER_DIR/server_run.sh"
+cp -r "$RELEASE_DIR/lib"               "$SERVER_DIR/"
 
 info "Extracting WebContent..."
 unzip -qo "$RELEASE_DIR/WebContent.zip" -d "$SERVER_DIR/"

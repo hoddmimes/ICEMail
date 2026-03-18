@@ -34,7 +34,7 @@ public class DBSqlite3 implements DBBase
             "SELECT * FROM " + DB_TABLE_PROFILE + " WHERE " + Profile.USERNAME + " = ?";
 
     private static final String SQL_FIND_ALL_USERS =
-            "SELECT * FROM " + DB_TABLE_PROFILE;
+            "SELECT * FROM " + DB_TABLE_PROFILE + " WHERE " + Profile.CONFIRMED + " = 1";
 
     private static final String SQL_UPDATE_USER_LAST_SEEN =
             "UPDATE " + DB_TABLE_PROFILE + " SET " +

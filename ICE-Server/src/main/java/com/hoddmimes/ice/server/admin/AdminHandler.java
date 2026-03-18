@@ -52,13 +52,15 @@ public class AdminHandler {
     private final AltchaService mAltchaService;
     private final boolean mAdminNotificationsEnabled;
     private final String mAdminNotificationAddress;
+    private final ImapRestApi mImapRestApi;
     private final ConcurrentHashMap<String, LinkedList<Long>> mRegistrationAttempts = new ConcurrentHashMap<>();
 
     public AdminHandler(DBBase db, String baseUrl, String mailDomain, boolean allowRegistration,
                         String internalMailUser, String internalMailPassword,
                         String smtpHost, int smtpPort, boolean smtpStartTls,
                         AltchaService altchaService,
-                        boolean adminNotificationsEnabled, String adminNotificationAddress) {
+                        boolean adminNotificationsEnabled, String adminNotificationAddress,
+                        ImapRestApi imapRestApi) {
         this.mDb = db;
         this.mBaseUrl = baseUrl;
         this.mMailDomain = mailDomain;
@@ -71,6 +73,7 @@ public class AdminHandler {
         this.mAltchaService = altchaService;
         this.mAdminNotificationsEnabled = adminNotificationsEnabled;
         this.mAdminNotificationAddress = adminNotificationAddress;
+        this.mImapRestApi = imapRestApi;
     }
 
     private boolean isRateLimited(String ip) {
@@ -298,6 +301,11 @@ public class AdminHandler {
             } catch (Exception e) {
                 ctx.status(500).result(JAux.statusResponse(500, "Failed to create user account, reason: " + e.getMessage() + "\n"));
                 return;
+            }
+
+            // Notify IMAP server so the user can authenticate without a restart
+            if (mImapRestApi != null) {
+                mImapRestApi.addUser(tUsername.toLowerCase(), tParams.get(Profile.PASSWORD));
             }
 
             sendAdminNotification(tUsername, tParams.get(Profile.CONFIRMATION_MAIL));

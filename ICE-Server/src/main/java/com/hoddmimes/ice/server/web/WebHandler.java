@@ -666,7 +666,11 @@ public class WebHandler {
             String body    = rawMail.substring(sepIdx + sep.length());
 
             String encryptedBody = PgpEncryptor.encrypt(body, publicKey);
-            String encryptedMail = headers + sep + encryptedBody;
+
+            // PGP armored output is pure 7-bit ASCII — override any original Content-Transfer-Encoding
+            // so JavaMail does not try to base64/qp-decode the armored text when reading it back.
+            String fixedHeaders = headers.replaceAll("(?i)Content-Transfer-Encoding:\\s*\\S+", "Content-Transfer-Encoding: 7bit");
+            String encryptedMail = fixedHeaders + sep + encryptedBody;
 
             // Build a MimeMessage from the encrypted bytes and append to Sent folder
             byte[] encBytes = encryptedMail.getBytes("UTF-8");

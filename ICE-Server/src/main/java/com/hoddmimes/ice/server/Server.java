@@ -526,7 +526,7 @@ public class Server
         // Admin handler for user management
         mAdminHandler = new AdminHandler(db, mBaseUrl, mMailDomain, mAllowRegistration,
                 mInternalMailUser, mInternalMailPassword, mInternalMailSmtpHost, mInternalMailSmtpPort, mInternalMailStartTls,
-                mAltchaService, mAdminNotificationsEnabled, mAdminNotificationAddress);
+                mAltchaService, mAdminNotificationsEnabled, mAdminNotificationAddress, mImapWebApi);
 
         // Admin mail debug handler
         mAdminMailHandler = new AdminMailHandler(db, mImapHost, mImapPort, mImapSsl);
@@ -800,7 +800,10 @@ public class Server
             }
 
             db.confirmUser(uid);
-            LOGGER.info("Account confirmed for user: {}", user.get(Profile.USERNAME).getAsString());
+            String confirmedUsername = user.get(Profile.USERNAME).getAsString();
+            String confirmedPassword = user.get(Profile.PASSWORD).getAsString();
+            LOGGER.info("Account confirmed for user: {}", confirmedUsername);
+            mImapWebApi.addUser(confirmedUsername, confirmedPassword);
             ctx.status(200).result(JAux.statusResponse(200, "Account confirmed successfully. You can now log in."));
         } catch (DBException e) {
             LOGGER.warn("Failed to confirm account: {}", e.getMessage());

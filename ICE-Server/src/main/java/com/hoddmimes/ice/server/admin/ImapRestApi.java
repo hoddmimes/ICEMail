@@ -44,6 +44,34 @@ public class ImapRestApi {
         return doGet("/users/" + URLEncoder.encode(userName, StandardCharsets.UTF_8) + "/mailboxes");
     }
 
+    public boolean addUser(String username, String password) {
+        try {
+            URL url = new URI(mBaseUrl + "/users/" + URLEncoder.encode(username, StandardCharsets.UTF_8)).toURL();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("PUT");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setDoOutput(true);
+            if (mAdminPassword != null) {
+                String auth = Base64.getEncoder().encodeToString(("admin:" + mAdminPassword).getBytes(StandardCharsets.UTF_8));
+                connection.setRequestProperty("Authorization", "Basic " + auth);
+            }
+            String body = "{\"password\":\"" + password + "\"}";
+            connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+
+            int statusCode = connection.getResponseCode();
+            if (statusCode >= 200 && statusCode < 300) {
+                LOGGER.info("IMAP user created for \"{}\"", username);
+                return true;
+            } else {
+                LOGGER.warn("IMAP addUser \"{}\" failed, status: {}", username, statusCode);
+                return false;
+            }
+        } catch (Exception e) {
+            LOGGER.warn("IMAP addUser \"{}\" failed, reason: {}", username, e.getMessage());
+            return false;
+        }
+    }
+
     public String getMailQueues() {
         return doGet("/mailQueues");
     }

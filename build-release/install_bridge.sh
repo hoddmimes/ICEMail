@@ -66,6 +66,7 @@ cp "$RELEASE_DIR/ice-bridge-1.0.jar"  "$BRIDGE_DIR/"
 cp "$RELEASE_DIR/log4j2.xml"           "$BRIDGE_DIR/"
 cp "$RELEASE_DIR/bridge_run.sh"        "$BRIDGE_DIR/"
 chmod +x "$BRIDGE_DIR/bridge_run.sh"
+cp -r "$RELEASE_DIR/lib"               "$BRIDGE_DIR/"
 
 # ─── 4. Generate config from template ─────────────────────────────────────────
 if [ ! -f "$BRIDGE_DIR/ice-bridge.json" ]; then
