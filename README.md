@@ -244,39 +244,123 @@ flow diagrams for all key operations (account creation, login, reading mail, com
 setup) is available in [`doc/architecture.md`](doc/architecture.md).
 
 
-## How to get it up and running.
+## Installation
 
 Setting up your own mail server is not for the faint of heart. Adding the ICEMail function add an extra dimension 
 of complexity. However, here is a crash instruction on 10000 feet what to think about.
 
-- Start with getting a machine to run the solution on, I have been using a Rasberry PI model 4, with Ubunto server 24.03 
-  as target machine.
-- You have to install the postfix mail server and pytho3-spf and Java (use something >= 17)
-- Then you need to get your self a registered public domain. You should take a look at how to use and setup DKIM, 
-  DMARC and SPF that is a configuration task in DNS and postfix. Well it is possible to get everything running on a private 
-   network without all mail protection setup in DNS. That what I used when developing the solution.
-- Also, there is a separate project required for providing the IMAP server functionality. The project is
-  [IMAP-apache-james]( https://github.com/hoddmimes/IMAP-Apache-James) the project is forked from 
-  [Apache James project](https://github.com/apache/james-project) and being stripped down to just include the need IMAP 
-  functionality.
-- That project IMAP-apache-james is essential and required.
+The most pragmatic way to get the solution up and running on a Linux is to install the components 
+using the provided [makeself](https://gcore.com/learning/how-to-make-file-executable-in-linux) run files
 
-I have compiled [makeself](https://gcore.com/learning/how-to-make-file-executable-in-linux) run files for the 
-components. They will install and setup what you need for getting a jump start. 
+They will install and setup what you need for getting a jump start.
 
 - ice-server ice-server-installer-1.0.run
 - ice-bridge ice-bridge-installer-1.0.run
 - ice-imap   ice-imap-installer-1.0.run
 
-_the run file for ice-imap is in the [IMAP-apache-james]( https://github.com/hoddmimes/IMAP-Apache-James) project_
+**Postfix Setup**  
+Maybe the most challenging part is the postfix setup. Besides the ordinary postfix configurations like 
+[DNS](https://support.dnsmadeeasy.com/hc/en-us/articles/34327241485083-MX-Record), 
+[DKIM](https://easydmarc.com/blog/how-to-configure-dkim-opendkim-with-postfix/),
+[DMARC](https://wiki.archlinux.org/title/OpenDMARC),
+[SPF](https://wiki.gentoo.org/wiki/Postfix/SPF) and SPAM filters that all are more or less mandatory.
+There are a few mandatory configurations for ICE mail. These are listed below.  
 
+**master.cf**
 
-- In the extra directory I have placed a few files that might help you to get going
+<u>SASL Authentication via ICEMail</u>
+
+Postfix delegates SMTP authentication to the ICEMail server's built-in Dovecot-compatible SASL service rather than to a real      
+Dovecot instance. The ICEMail server listens on a plain TCP socket on loopback.
+```
+smtpd_sasl_auth_enable = yes                                                                                                      
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = inet:127.0.0.1:12345
+```
+
+<u>Virtual Mailbox Delivery via LMTP to ICE Imap</u>
+
+Incoming mail for koxnan.com is not delivered locally by Postfix. Instead it is handed off to the ICEMail IMAP server (Apache     
+James) via LMTP. The domain must not be in mydestination — if it were, Postfix would attempt local delivery instead.
+```
+virtual_transport = lmtp:inet:127.0.0.1:24                
+virtual_mailbox_domains = <mail domain>
+```
+
+<u>PGP Encryption Content Filter</u>
+
+After a message is accepted, Postfix passes it through the ICEMail encryption filter (PostfixAfterQueueFilter) before final       
+delivery. The filter encrypts the message body with the recipient's PGP public key and re-injects the encrypted message back into
+Postfix. The policy service on port 10028 is used for end-of-data checks.
+```
+content_filter = encryptor:[127.0.0.1]:10026
+smtpd_end_of_data_restrictions = check_policy_service inet:127.0.0.1:10028
+```
+
+The flow for inbound mail is:
+
+▎ Incoming SMTP → Postfix → encryptor filter (:10026) → re-injected encrypted mail → LMTP → Apache James (:24)
+
+<u>Policy service (port 10028)</u>
+
+Port 10028 is a standalone TCP listener started by the ICEMail server (PostfixPolicyServer). Postfix calls it as a policy service
+at end-of-data via main.cf:
+```
+smtpd_end_of_data_restrictions = check_policy_service inet:127.0.0.1:10028
+```
+
+**master.cf**
+
+<u>Submission port for ICEMail bridge (port 1587)</u>
+
+The standard submission port 587, if you run the bridge on the same host as the ice-server, you should let the bridge use 
+port 587 and havee postfix to listening on port 1587. This is the port the ICEMail bridge's SMTP proxy connects to when  
+relaying outbound mail from clients. TLS and SASL authentication are enforced, and only authenticated clients or local networks   
+are permitted
+```
+587 inet n       -       y       -       -       smtpd                                                                           
+-o syslog_name=postfix/submission                                                                                               
+-o smtpd_tls_security_level=encrypt                                                                                             
+-o smtpd_sasl_auth_enable=yes                                                                                                   
+-o smtpd_tls_auth_only=yes                                                                                                      
+-o smtpd_client_restrictions=permit_mynetworks,permit_sasl_authenticated,reject
+```
+
+<u>PGP encryption filter service (encryptor)</u>
+
+This defines the encryptor content filter referenced in main.cf. Postfix connects to the ICEMail PostfixAfterQueueFilter on port  
+10026 using the smtp transport. MIME conversion is disabled to prevent Postfix from altering the message body before the filter
+sees it. TLS is disabled on this loopback connection since it is internal.
+```
+encryptor unix  -      -       n       -       10      smtp
+-o smtp_send_xforward_command=yes                                                                                               
+-o disable_mime_output_conversion=yes                                                                                           
+-o smtp_tls_security_level=none                                                                                                 
+-o smtp_tls_wrappermode=no
+```
+
+<u>Re-injection listener (port 10027)</u>
+
+After the PostfixAfterQueueFilter has encrypted the message body, it re-injects the encrypted mail 
+back into Postfix on port 10027. This listener is configured to bypass all further filtering — no content filter, no address mappings, no header/body checks
+       — so the already-encrypted message goes straight through to LMTP delivery to IMAP server.
+```
+127.0.0.1:10027 inet n  -       n       -       -       smtpd
+-o content_filter=                                                                                                              
+-o receive_override_options=no_address_mappings,no_unknown_recipient_checks,no_header_body_checks                               
+-o local_recipient_maps=                                                                                                        
+-o relay_recipient_maps=                                                                                                        
+-o smtpd_relay_restrictions=permit_mynetworks,reject
+```
+
+- In the project _extra_ directory I have placed a few files that might help you to get going
     - postfix configuration files 
 
+---
 
+## Project Name
 
-The ICE is an abbrivation for
+The ICE is an abbreviation for
 - **I**: Interrelated
 - **C**: Connectivity
 - **E**: Engagement
