@@ -1,4 +1,9 @@
 ## ICEMail
+
+- Own hosted mailserver, based upon open source software, postfix, Apache-James, and developed ICE mail
+- Focus on privacy, all data in the mail solution are encrypted (PGP), messages,user data in flight and persisted on disk.
+- Only users can read their own mails after being transferred to their mail client machines.
+
 # Why?
 **_Why would you like to run your own mail server?_**  
 The simple answer is, you do not! Unless you have close to sick desire to for spending time on a
@@ -7,9 +12,9 @@ challenging exercise and/or crazy about your privacy.
 **[Just Google pros/cons](https://www.google.com/search?q=why+should+you+run+your+own+mail+server&oq=why+should+you+run+your+own+mail+server)**
 
 _Personally, I have hosted my own mail server for over 20 years. It started off as a fun and interesting project, 
-and it has continued for no particular reason! 😊 However, it hasn't always been enjoyable or intriguing. 
+and it has continued for no particular reason! 😊 However, it hasn't always been enjoyable or appealing. 
 For me this project was about learning a little bit more about how different mail components are interconnected
-and just have anything to do on my so called, infinite vaccation_.
+and just to have something to do on my so called, infinite vacation_.
 
 
 
@@ -17,7 +22,8 @@ and just have anything to do on my so called, infinite vaccation_.
 
 ICEMail is a self-hosted, end-to-end encrypted mail system inspired by [Proton Mail](https://en.wikipedia.org/wiki/Proton_Mail),
 but designed to run on your own infrastructure. The goal is straightforward: you own your mail server, you own your keys,
-and no part of the system — not even the server — can read your messages.
+and all encrypted with your password that never leaves yor mail client — all data/mails, keys are encrypted on the server
+, the server can read/see your data in clear text.
 
 The project is a personal endeavour started during retirement, with no commercial ambition. If it becomes useful to others,
 that is a welcome bonus. It is also my first experience using AI (Claude) as a development aid — a pairing that has proven
